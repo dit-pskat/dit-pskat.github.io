@@ -402,6 +402,44 @@
     return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(number);
   }
 
+  function numberValue(value) {
+    const number = Number(value ?? 0);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function effectiveHouseholds(row) {
+    return numberValue(row?.effective_households_total ?? row?.households_total ?? 0);
+  }
+
+  function distributionHouseholds(row) {
+    return numberValue(row?.distribution_households_total ?? row?.households_spread ?? row?.['PERSEBARAN KK'] ?? 0);
+  }
+
+  function bnbaHouseholds(row) {
+    return numberValue(row?.bnba_households_total ?? row?.bnba_summary?.kk_unique ?? 0);
+  }
+
+  function householdMetrics(row) {
+    const distribution = distributionHouseholds(row);
+    const bnba = bnbaHouseholds(row);
+    const effective = effectiveHouseholds(row) || (bnba > 0 ? bnba : distribution);
+    const source = row?.households_effective_source || (bnba > 0 ? 'bnba' : (distribution > 0 ? 'distribution' : 'empty'));
+    const delta = numberValue(row?.households_delta_bnba_distribution ?? (bnba > 0 && distribution > 0 ? bnba - distribution : 0));
+    return { effective, distribution, bnba, source, delta };
+  }
+
+  function householdSourceLabel(source) {
+    if (source === 'bnba') return 'Hasil padan BNBA';
+    if (source === 'distribution') return 'Data persebaran';
+    return 'Belum ada angka KK';
+  }
+
+  function householdSummaryText(row) {
+    const metrics = householdMetrics(row);
+    const diffText = metrics.delta ? `, selisih ${metrics.delta > 0 ? '+' : ''}${fullNumber(metrics.delta)}` : '';
+    return `Persebaran ${fullNumber(metrics.distribution)} / BNBA ${fullNumber(metrics.bnba)}${diffText}.`;
+  }
+
   function prefersReducedMotion() {
     return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   }
@@ -528,7 +566,10 @@
       tribe: 'Suku/Komunitas',
       households_spread: 'Persebaran KK',
       sync_year: 'Tahun sinkron Dukcapil',
-      households_total: 'Jumlah KK',
+      households_total: 'KK efektif',
+      effective_households_total: 'KK efektif',
+      distribution_households_total: 'KK persebaran',
+      bnba_households_total: 'KK hasil padan BNBA',
       is_proposed: 'Pengusulan',
       notes: 'Catatan',
       row_hash: 'Hash baris',
@@ -549,9 +590,14 @@
     const map = new Map();
     (rows || []).forEach(row => {
       const source = sourceFromRow(row);
-      const current = map.get(source) || { source_data: source, rows: 0, households_total: 0 };
+      const metrics = householdMetrics(row);
+      const current = map.get(source) || { source_data: source, rows: 0, households_total: 0, effective_households_total: 0, distribution_households_total: 0, bnba_households_total: 0, households_delta_bnba_distribution: 0 };
       current.rows += 1;
-      current.households_total += Number(row?.households_total ?? row?.['JUMLAH KK'] ?? row?.households_spread ?? row?.['PERSEBARAN KK'] ?? 0) || 0;
+      current.households_total += metrics.effective || numberValue(row?.['JUMLAH KK']);
+      current.effective_households_total += metrics.effective || numberValue(row?.['JUMLAH KK']);
+      current.distribution_households_total += metrics.distribution;
+      current.bnba_households_total += metrics.bnba;
+      current.households_delta_bnba_distribution += metrics.delta;
       map.set(source, current);
     });
     return Array.from(map.values()).sort((a, b) => b.rows - a.rows);
@@ -659,8 +705,11 @@
         community_name: first.community_name || null,
         source_data: 'Upload BNBA',
         households_total: tableRows.length,
+        effective_households_total: tableRows.length,
         distribution_households_total: 0,
         bnba_households_total: tableRows.length,
+        households_effective_source: tableRows.length > 0 ? 'bnba' : 'empty',
+        households_delta_bnba_distribution: 0,
         checked_at: first.checked_at || null,
         bnba_summary: {
           has_bnba: tableRows.length > 0,
@@ -700,8 +749,16 @@
       existing.bnba_rows = groupItem.bnba_rows;
       existing.bnba_jobs = groupItem.bnba_jobs;
       existing.bnba_households_total = groupItem.bnba_households_total;
-      if (!Number(existing.households_total || 0)) {
+      const distributionTotal = distributionHouseholds(existing) || effectiveHouseholds(existing);
+      if (Number(groupItem.bnba_households_total || 0) > 0) {
         existing.households_total = groupItem.bnba_households_total || 0;
+        existing.effective_households_total = groupItem.bnba_households_total || 0;
+        existing.households_effective_source = 'bnba';
+        existing.households_delta_bnba_distribution = distributionTotal > 0 ? Number(groupItem.bnba_households_total || 0) - distributionTotal : 0;
+      } else if (!Number(existing.households_total || 0)) {
+        existing.households_total = groupItem.bnba_households_total || 0;
+        existing.effective_households_total = groupItem.bnba_households_total || 0;
+        existing.households_effective_source = 'empty';
       }
     });
     return { ...payload, items: merged };
@@ -741,7 +798,17 @@
 
   function defaultKkColumn(sheet) {
     const columns = sheet?.columns || [];
-    return columns.find(col => /\bkk\b|kartu keluarga/i.test(col)) || '';
+    return columns.find(col => {
+      const text = String(col || '').replace(/[_\-\/]+/g, ' ');
+      return /(^|\b)(no|nomor)\s*kk\b|\bkartu keluarga\b/i.test(text) && !/\burut\b|\bjumlah\b|\banggota\b|\bjiwa\b|\bkepala\b|\bnama\b/i.test(text);
+    }) || columns.find(col => {
+      const text = String(col || '').replace(/[_\-\/]+/g, ' ');
+      return /\bkk\b|\bkartu keluarga\b/i.test(text) && !/\burut\b|\bjumlah\b|\banggota\b|\bjiwa\b|\bkepala\b|\bnama\b/i.test(text);
+    }) || '';
+  }
+
+  function basicExcelSummary(sheet) {
+    return sheet?.basic_summary && typeof sheet.basic_summary === 'object' ? sheet.basic_summary : null;
   }
 
   function nikStats(rows, column) {
@@ -1157,6 +1224,7 @@
     return h('div', { className: 'source-pills flex flex-wrap gap-2' }, rows.map(source => {
       const value = source.source_data || source.label || '';
       const selected = normalizeName(value) === normalizeName(selectedSource);
+      const title = `${value} - ${fullNumber(source.rows || source.count || 0)} baris, ${fullNumber(effectiveHouseholds(source))} KK efektif. ${householdSummaryText(source)}`;
       const content = [
         h(Icon, { key: 'icon', name: selected ? 'CheckCircle2' : 'Database', size: 14 }),
         h('span', { key: 'label', className: 'min-w-0 break-words' }, value),
@@ -1167,14 +1235,14 @@
           key: value,
           type: 'button',
           className: cx('source-pill-button inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black ring-1 transition-colors duration-150', selected ? 'bg-slate-950 text-white ring-slate-950' : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'),
-          title: value,
+          title,
           onClick: () => onSelect(selected ? '' : value),
         }, content);
       }
       return h('span', {
       key: source.source_data || source.label,
       className: 'inline-flex max-w-full items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200',
-      title: source.source_data || source.label,
+      title,
     }, content);
     }));
   }
@@ -1235,6 +1303,39 @@
     );
   }
 
+  function BasicExcelSummary({ summary }) {
+    if (!summary) return null;
+    const notes = Array.isArray(summary.notes) ? summary.notes.filter(Boolean) : [];
+    const sourceLine = [
+      summary.households_excel_source ? `Sumber KK Excel: ${summary.households_excel_source}` : '',
+      summary.kk_number_column ? `Kolom No KK: ${summary.kk_number_column}` : '',
+      summary.people_unique_source ? `Jiwa unik: ${summary.people_unique_source}` : '',
+    ].filter(Boolean).join(' · ');
+    return h('div', { className: 'rounded-2xl border border-sky-100 bg-sky-50/70 p-4' },
+      h('div', { className: 'flex flex-col gap-2 md:flex-row md:items-start md:justify-between' },
+        h('div', null,
+          h('p', { className: 'text-xs font-black uppercase text-sky-700' }, 'Ringkasan hitungan awal Excel'),
+          h('p', { className: 'mt-1 text-sm font-semibold text-slate-600' }, sourceLine || 'Ringkasan ini dihitung dari struktur kolom dan isi file.')
+        ),
+        h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-black text-sky-700 ring-1 ring-sky-100' },
+          h(Icon, { name: 'FileCheck2', size: 14 }),
+          'Ikut dicatat di hasil'
+        )
+      ),
+      h('div', { className: 'mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5' },
+        h(MiniMetric, { icon: 'House', label: 'KK Excel', value: fullNumber(summary.households_excel_total || 0) }),
+        h(MiniMetric, { icon: 'CopyCheck', label: 'KK unik No KK', value: fullNumber(summary.kk_number_unique || 0) }),
+        h(MiniMetric, { icon: 'Users', label: 'Jiwa terbaca', value: fullNumber(summary.people_total || 0) }),
+        h(MiniMetric, { icon: 'Fingerprint', label: 'Jiwa unik', value: fullNumber(summary.people_unique || 0) }),
+        h(MiniMetric, { icon: 'TriangleAlert', label: 'Perlu cek awal', value: fullNumber(summary.problem_rows || 0) })
+      ),
+      notes.length ? h('div', { className: 'mt-3 flex flex-wrap gap-2' }, notes.slice(0, 5).map((note, idx) =>
+        h('span', { key: `${idx}-${note}`, className: 'rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200' }, note)
+      )) : null,
+      Number(summary.empty_or_separator_rows || 0) > 0 ? h('p', { className: 'mt-3 text-xs font-semibold text-slate-500' }, `${fullNumber(summary.empty_or_separator_rows)} baris kosong/separator tidak dihitung sebagai jiwa.`) : null
+    );
+  }
+
   function itemLocationLine(item) {
     return [
       item?.regency ? `Kab/Kota: ${item.regency}` : '',
@@ -1285,6 +1386,7 @@
     if (!item) return null;
     const bnba = item.bnba_summary || {};
     const hasBnba = Boolean(bnba.has_bnba || Number(bnba.kk_unique || 0) > 0 || Number(bnba.checked_rows || 0) > 0);
+    const households = householdMetrics(item);
     return h('section', { className: 'location-detail-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm' },
       h('div', { className: 'flex items-start justify-between gap-3' },
         h('div', { className: 'min-w-0' },
@@ -1306,7 +1408,11 @@
         h(LocationField, { icon: 'UsersRound', label: 'Komunitas', value: item.community_name })
       ),
       h('div', { className: 'mt-3 grid grid-cols-2 gap-2 text-xs' },
-        h(MiniMetric, { icon: 'Users', label: 'Jumlah KK', value: `${fullNumber(item.households_total || 0)} KK` }),
+        h(MiniMetric, { icon: 'Users', label: 'KK efektif', value: `${fullNumber(households.effective)} KK` }),
+        h(MiniMetric, { icon: 'Database', label: 'KK persebaran', value: `${fullNumber(households.distribution)} KK` }),
+        h(MiniMetric, { icon: 'FileSpreadsheet', label: 'KK hasil padan', value: `${fullNumber(households.bnba)} KK` }),
+        h(MiniMetric, { icon: 'GitCompareArrows', label: 'Sumber angka', value: householdSourceLabel(households.source) }),
+        households.delta ? h(MiniMetric, { icon: 'Activity', label: 'Selisih BNBA', value: `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)} KK` }) : null,
         h(MiniMetric, { icon: 'Database', label: 'Sumber', value: item.source_data || item.type || '-' }),
         h(MiniMetric, { icon: 'CalendarDays', label: 'Tahun data', value: item.data_year || item.sync_year || '-' }),
         h(MiniMetric, { icon: 'Hash', label: 'Kode wilayah', value: item.region_code || '-' }),
@@ -1531,16 +1637,21 @@
               ),
               h('div', { className: 'stat-detail-list' },
                 group.rows.slice(0, 140).map((row, index) =>
-                  h('article', { key: `${group.name}-${row.name}-${row.region_code || index}`, className: 'stat-detail-row' },
-                    h('div', { className: 'min-w-0' },
-                      h('h3', { title: row.name }, row.name || '-'),
-                      h('div', { className: 'stat-detail-chips' }, renderLocationMeta(row))
-                    ),
-                    h('div', { className: 'stat-detail-counts' },
-                      h('span', null, h(Icon, { name: 'LocateFixed', size: 14 }), `${fullNumber(row.locations || 0)} lokasi`),
-                      h('span', null, h(Icon, { name: 'Users', size: 14 }), `${fullNumber(row.households_total || 0)} KK`)
-                    )
-                  )
+                  {
+                    const households = householdMetrics(row);
+                    return h('article', { key: `${group.name}-${row.name}-${row.region_code || index}`, className: 'stat-detail-row' },
+                      h('div', { className: 'min-w-0' },
+                        h('h3', { title: row.name }, row.name || '-'),
+                        h('div', { className: 'stat-detail-chips' }, renderLocationMeta(row))
+                      ),
+                      h('div', { className: 'stat-detail-counts' },
+                        h('span', null, h(Icon, { name: 'LocateFixed', size: 14 }), `${fullNumber(row.locations || 0)} lokasi`),
+                        h('span', { title: householdSummaryText(row) }, h(Icon, { name: 'Users', size: 14 }), `${fullNumber(households.effective)} KK efektif`),
+                        h('span', { title: 'KK pada data persebaran' }, h(Icon, { name: 'Table', size: 14 }), `${fullNumber(households.distribution)} persebaran`),
+                        h('span', { title: 'KK unik dari hasil padan BNBA' }, h(Icon, { name: 'FileSpreadsheet', size: 14 }), `${fullNumber(households.bnba)} BNBA`)
+                      )
+                    );
+                  }
                 )
               )
             )
@@ -2024,10 +2135,28 @@
         return true;
       });
       return rows.reduce((acc, row) => {
+        const metrics = householdMetrics(row);
         acc.locations += 1;
-        acc.households += Number(row.households_total || 0);
+        acc.households += metrics.effective;
+        acc.effective_households_total += metrics.effective;
+        acc.distribution_households_total += metrics.distribution;
+        acc.bnba_households_total += metrics.bnba;
+        if (metrics.source === 'bnba') acc.households_from_bnba_locations += 1;
+        else if (metrics.source === 'distribution') acc.households_from_distribution_locations += 1;
+        else acc.households_empty_locations += 1;
+        if (metrics.bnba > 0 && metrics.distribution > 0 && metrics.bnba !== metrics.distribution) acc.households_bnba_diff_locations += 1;
         return acc;
-      }, { locations: 0, households: 0 });
+      }, {
+        locations: 0,
+        households: 0,
+        effective_households_total: 0,
+        distribution_households_total: 0,
+        bnba_households_total: 0,
+        households_from_bnba_locations: 0,
+        households_from_distribution_locations: 0,
+        households_empty_locations: 0,
+        households_bnba_diff_locations: 0,
+      });
     }
 
     function seedFromScope(scope) {
@@ -2146,7 +2275,7 @@
         <div class="kat-popup-path"></div>
         <div class="kat-popup-metrics">
           <span><b>${fullNumber(stats.locations)}</b><small>Lokasi</small></span>
-          <span><b>${fullNumber(stats.households)}</b><small>KK</small></span>
+          <span><b>${fullNumber(stats.households)}</b><small>KK efektif</small></span>
         </div>
         <div class="kat-popup-actions">
           <button type="button" class="kat-popup-primary" data-map-padan>Padankan wilayah</button>
@@ -2363,7 +2492,7 @@
               const name = featureNameByLevel(feature, mapLevel);
               const provinceStat = mapLevel === 'province' ? (statMap.get(normalizeName(name)) || {}) : {};
               const scopedStats = mapLevel === 'province'
-                ? { locations: Number(provinceStat.distribution_count || 0), households: Number(provinceStat.households_total || 0) }
+                ? { locations: Number(provinceStat.distribution_count || 0), households: effectiveHouseholds(provinceStat) }
                 : statsForScope(scopeForLevel(mapLevel, name));
               const active = normalizeName(selectedRegion[mapLevel] || '') === normalizeName(name);
               const scopedActive = !active && (
@@ -2387,7 +2516,7 @@
                 ? (statMap.get(normalizeName(name)) || {})
                 : statsForScope(scope);
               const locations = mapLevel === 'province' ? Number(stat.distribution_count || 0) : Number(stat.locations || 0);
-              const households = mapLevel === 'province' ? Number(stat.households_total || 0) : Number(stat.households || 0);
+              const households = mapLevel === 'province' ? effectiveHouseholds(stat) : Number(stat.households || 0);
               layerItem.bindTooltip(`${mapLevelLabel(mapLevel)}: ${name}`, { sticky: true, className: 'kat-map-tooltip' });
               layerItem.on({
                 mouseover(event) {
@@ -2412,7 +2541,7 @@
                   chooseMapRegion(mapLevel, name, event.latlng, meta);
                 },
               });
-              layerItem.options.title = `${name} - ${fullNumber(locations)} lokasi, ${fullNumber(households)} KK`;
+              layerItem.options.title = `${name} - ${fullNumber(locations)} lokasi, ${fullNumber(households)} KK efektif`;
             },
           }).addTo(map);
           layerRef.current = layer;
@@ -2471,15 +2600,18 @@
     }, [data.province_stats, selectedProvince]);
     const activeSources = data.source_breakdown || [];
     const items = data.items || [];
+    const summaryHouseholds = householdMetrics(summary);
+    const summaryDiffLocations = Number(summary.households_bnba_diff_locations || 0);
+    const householdCardSubtitle = `${householdSummaryText(summary)} BNBA menggantikan persebaran bila ada, bukan dijumlah.${summaryDiffLocations ? ` ${fullNumber(summaryDiffLocations)} lokasi beda angka.` : ''}`;
     const statCards = [
       { key: 'province', label: 'Persebaran Provinsi', value: summary.province_total, tone: 'blue', icon: 'Map', breakdownKey: 'province', subtitle: 'Provinsi unik setelah normalisasi' },
       { key: 'regency', label: 'Persebaran Kabupaten', value: summary.regency_total, tone: 'cyan', icon: 'Landmark', breakdownKey: 'regency', subtitle: 'Kabupaten/Kota per provinsi' },
       { key: 'district', label: 'Persebaran Kecamatan', value: summary.district_total, tone: 'emerald', icon: 'Network', breakdownKey: 'district', subtitle: 'Kecamatan dikelompokkan per provinsi' },
       { key: 'village', label: 'Persebaran Kelurahan', value: summary.village_total, tone: 'indigo', icon: 'MapPinned', breakdownKey: 'village', subtitle: 'Kelurahan/Desa per kecamatan' },
       { key: 'location', label: 'Jumlah Lokasi', value: summary.location_total || summary.distribution_total, tone: 'violet', icon: 'LocateFixed', breakdownKey: 'location', subtitle: 'Semua lokasi persebaran' },
-      { key: 'households', label: 'Jumlah KK', value: summary.households_total, tone: 'slate', icon: 'Users', breakdownKey: 'location', subtitle: 'Angka riil, tidak dibulatkan' },
-      { key: 'locations_with_households', label: 'Lokasi KK Terisi', value: summary.locations_with_households, tone: 'emerald', icon: 'CheckCircle2', breakdownKey: 'location', subtitle: 'Lokasi dengan KK lebih dari 0', filter: row => Number(row.households_total || 0) > 0 },
-      { key: 'locations_zero_households', label: 'Lokasi KK 0', value: summary.locations_zero_households, tone: 'amber', icon: 'CircleSlash', breakdownKey: 'location', subtitle: 'Lokasi yang masih 0 KK', filter: row => Number(row.households_total || 0) <= 0 },
+      { key: 'households', label: 'KK efektif', value: summaryHouseholds.effective, tone: 'slate', icon: 'Users', breakdownKey: 'location', subtitle: householdCardSubtitle },
+      { key: 'locations_with_households', label: 'Lokasi KK Terisi', value: summary.locations_with_households, tone: 'emerald', icon: 'CheckCircle2', breakdownKey: 'location', subtitle: 'Lokasi dengan KK efektif lebih dari 0', filter: row => effectiveHouseholds(row) > 0 },
+      { key: 'locations_zero_households', label: 'Lokasi KK 0', value: summary.locations_zero_households, tone: 'amber', icon: 'CircleSlash', breakdownKey: 'location', subtitle: 'Lokasi yang masih 0 KK efektif', filter: row => effectiveHouseholds(row) <= 0 },
     ];
     const activeStatDetail = statCards.find(stat => stat.key === statDetailKey) || null;
     const statDetailRows = activeStatDetail
@@ -2487,8 +2619,12 @@
       : [];
     const activeScopeTitle = selectedRegion.village || selectedRegion.district || selectedRegion.regency || selectedRegion.province || selectedProvince;
     const activeScopeStats = selectedRegion.province ? statsForScope(selectedRegion) : null;
+    const selectedProvinceHouseholds = householdMetrics(selectedStat || {});
     const activeLocations = activeScopeStats ? activeScopeStats.locations : Number(selectedStat?.distribution_count || 0);
-    const activeHouseholds = activeScopeStats ? activeScopeStats.households : Number(selectedStat?.households_total || 0);
+    const activeHouseholds = activeScopeStats ? activeScopeStats.effective_households_total : selectedProvinceHouseholds.effective;
+    const activeDistributionHouseholds = activeScopeStats ? activeScopeStats.distribution_households_total : selectedProvinceHouseholds.distribution;
+    const activeBnbaHouseholds = activeScopeStats ? activeScopeStats.bnba_households_total : selectedProvinceHouseholds.bnba;
+    const activeDiffLocations = activeScopeStats ? activeScopeStats.households_bnba_diff_locations : Number(selectedStat?.households_bnba_diff_locations || 0);
     return h('main', { className: 'home-map grid gap-5' },
       h('section', { className: 'stat-grid grid gap-3' },
         statCards.map(stat => h(StatCard, {
@@ -2565,7 +2701,10 @@
             ) : null,
             h('div', { className: 'mt-3 grid grid-cols-2 gap-2 text-xs' },
               h(MiniMetric, { icon: 'LocateFixed', label: 'Lokasi', value: fullNumber(activeLocations) }),
-              h(MiniMetric, { icon: 'Users', label: 'Jumlah KK', value: fullNumber(activeHouseholds) }),
+              h(MiniMetric, { icon: 'Users', label: 'KK efektif', value: fullNumber(activeHouseholds) }),
+              h(MiniMetric, { icon: 'Table', label: 'KK persebaran', value: fullNumber(activeDistributionHouseholds) }),
+              h(MiniMetric, { icon: 'FileSpreadsheet', label: 'KK hasil padan', value: fullNumber(activeBnbaHouseholds) }),
+              activeDiffLocations ? h(MiniMetric, { icon: 'Activity', label: 'Lokasi beda angka', value: fullNumber(activeDiffLocations) }) : null,
               h(MiniMetric, { icon: 'Database', label: 'Sumber aktif', value: selectedSource || 'Semua' }),
               h(MiniMetric, { icon: 'ListFilter', label: 'Daftar tampil', value: fullNumber(items.length) })
             ),
@@ -2591,6 +2730,7 @@
             items.length ? items.map((item, idx) => {
               const key = locationItemKey(item, idx);
               const selected = (selectedItem && locationItemKey(selectedItem, selectedItem.__idx ?? idx) === key) || locationScopeSelected(item);
+              const households = householdMetrics(item);
               return h('article', { key, className: cx('location-card rounded-2xl border p-3 transition-colors duration-150', selected ? 'is-map-linked border-blue-200 bg-blue-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200 hover:bg-white') },
               h('button', { type: 'button', className: 'location-card-main text-left', onClick: () => selectLocationOnMap(item, idx) },
                 h('div', { className: 'flex items-start justify-between gap-3' },
@@ -2606,8 +2746,10 @@
                 ),
                 item.address ? h('p', { className: 'mt-2 break-words text-xs leading-5 text-slate-600' }, item.address) : null,
                 h('div', { className: 'mt-2 flex flex-wrap items-center gap-2 text-xs font-black text-slate-600' },
-                  h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200' }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(item.households_total || 0)} KK`),
-                  item.bnba_summary?.has_bnba ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-200' }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(item.bnba_summary.kk_unique || 0)} KK BNBA`) : null,
+                  h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK efektif`),
+                  households.distribution ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200' }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} persebaran`) : null,
+                  households.bnba ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-200' }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(households.bnba)} BNBA`) : null,
+                  households.delta ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-200' }, h(Icon, { name: 'Activity', size: 13 }), `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)}`) : null,
                   item.source_data ? h('span', { className: 'max-w-full break-words rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: item.source_data }, item.source_data) : null,
                   item.data_year ? h('span', { className: 'rounded-full bg-white px-2 py-1 ring-1 ring-slate-200' }, item.data_year) : null
                 )
@@ -2855,6 +2997,7 @@
     const sheets = draft?.preview?.sheets || [];
     const selectedMeta = sheets.find(sheet => sheet.name === selectedSheet) || sheets[0] || {};
     const selectedConfig = buildSheetConfig(selectedMeta, sheetConfigs[selectedSheet] || {}, true);
+    const selectedBasicSummary = basicExcelSummary(selectedMeta);
     const columns = selectedMeta.columns || [];
     const needsRegion = jobMode === 'padan';
 
@@ -3087,6 +3230,7 @@
               )
             )
           ),
+          h('div', { className: 'mt-4' }, h(BasicExcelSummary, { summary: selectedBasicSummary })),
           sheetMode === 'multiple' ? h('div', { className: 'mt-5 grid gap-3 md:grid-cols-2' },
             sheets.map(sheet => {
               const config = buildSheetConfig(sheet, sheetConfigs[sheet.name] || {}, false);
