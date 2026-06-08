@@ -53,6 +53,43 @@
     }
   }
 
+  function shortlinkParamName() {
+    const param = String(publicRuntimeConfig.shortlink_query_param || window.APP_CONFIG?.shortlinkParam || 's').replace(/[^A-Za-z0-9_]/g, '');
+    return param || 's';
+  }
+
+  function shortCodeFromText(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const direct = raw.replace(/[^A-Za-z0-9]/g, '');
+    if (/^[A-Za-z0-9]{6,24}$/.test(raw) || (!/[?:/#]/.test(raw) && direct)) {
+      return direct.slice(0, 24);
+    }
+    try {
+      const url = new URL(raw, window.location.href);
+      return String(url.searchParams.get(shortlinkParamName()) || url.searchParams.get('s') || url.searchParams.get('code') || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+    } catch (_) {
+      return raw.replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+    }
+  }
+
+  function shortCodeFromLocation() {
+    const query = currentQuery();
+    return shortCodeFromText(query.get(shortlinkParamName()) || query.get('s') || query.get('code') || '');
+  }
+
+  function jobShortUrl(job) {
+    const explicit = String(job?.short_url || '').trim();
+    if (explicit) return explicit;
+    const code = shortCodeFromText(job?.short_code || '');
+    if (!code) return '';
+    let base = String(publicRuntimeConfig.frontend_base_url || window.APP_CONFIG?.frontendBase || window.location.origin + window.location.pathname).replace(/\/+$/, '');
+    if (/^https?:\/\/[^/]+$/i.test(base)) base += '/';
+    const separator = base.includes('?') ? '&' : '?';
+    const params = new URLSearchParams({ [shortlinkParamName()]: code });
+    return `${base}${separator}${params.toString()}`;
+  }
+
   function resultDownloadUrl(job, file = 'package', adminKey = '') {
     const id = String(job?.id || '').trim();
     const token = String(job?.download_token || queryValueFromUrl(job?.result_file_url, 'token') || '').trim();
@@ -78,6 +115,7 @@
 
   function readInitialTab() {
     const query = currentQuery();
+    if (shortCodeFromLocation()) return 'padan';
     if (query.get('admin') === '1') return 'admin';
     if (query.get('about') === '1') return 'about';
     if (query.get('archive') === '1' || query.get('links') === '1') return 'links';
@@ -1263,6 +1301,54 @@
         )
       );
     }));
+  }
+
+  async function copyText(text) {
+    const value = String(text || '');
+    if (!value) return false;
+    try {
+      await navigator.clipboard?.writeText(value);
+      return true;
+    } catch (_) {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', 'readonly');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand?.('copy') || false;
+      textarea.remove();
+      return Boolean(ok);
+    }
+  }
+
+  function CopyShortlinkButton({ url, label = 'Copy link', compact = false }) {
+    const [copied, setCopied] = useState(false);
+    if (!url) return null;
+    async function copy() {
+      const ok = await copyText(url);
+      setCopied(ok);
+      window.setTimeout(() => setCopied(false), 1600);
+    }
+    return h(Button, { type: 'button', variant: copied ? 'success' : 'soft', className: cx(compact ? 'h-8 gap-1.5 px-2 text-xs' : 'gap-2', 'shrink-0'), onClick: copy },
+      h(Icon, { name: copied ? 'Check' : 'Copy', size: compact ? 13 : 15 }),
+      copied ? 'Tersalin' : label
+    );
+  }
+
+  function ShortlinkBox({ job, compact = false }) {
+    const url = jobShortUrl(job);
+    if (!url) return null;
+    return h('div', { className: cx(compact ? 'mt-2' : 'mt-3', 'rounded-xl bg-white p-3 ring-1 ring-slate-200') },
+      h('div', { className: 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between' },
+        h('div', { className: 'min-w-0' },
+          h('p', { className: 'text-xs font-black uppercase text-slate-500' }, 'Shortlink'),
+          h('p', { className: 'mt-1 text-xs font-semibold text-slate-700', style: { wordBreak: 'break-all' } }, url)
+        ),
+        h(CopyShortlinkButton, { url, compact, label: compact ? 'Copy' : 'Copy shortlink' })
+      )
+    );
   }
 
   function StatCard({ label, value, tone = 'slate', icon = 'BarChart3', subtitle = '', onClick, active = false, loading = false }) {
@@ -2976,7 +3062,7 @@
     );
   }
 
-  function PadanDataPage({ appConfig, initialRegion }) {
+  function PadanDataPage({ appConfig, initialRegion, initialShortCode = '' }) {
     const [email, setEmail] = useState('');
     const [file, setFile] = useState(null);
     const [draft, setDraft] = useState(null);
@@ -3251,8 +3337,11 @@
         ) : null
       ),
       h('aside', { className: 'grid content-start gap-5' },
-        queued ? h('div', { className: 'rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800' }, `Job #${queued.id} siap dicek di panel status.`) : null,
-        h(StatusPanel, { initialJobId: queued?.id || '', initialEmail: email })
+        queued ? h('div', { className: 'rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800' },
+          h('p', null, `Job #${queued.id} siap dicek di panel status.`),
+          h(ShortlinkBox, { job: queued })
+        ) : null,
+        h(StatusPanel, { initialJobId: queued?.id || '', initialEmail: email, initialShortCode: queued?.short_code || initialShortCode })
       ),
       fixConfirm ? h(Modal, { title: 'Data fix sudah ada', onClose: () => setFixConfirm(null) },
         h('div', { className: 'grid gap-4 text-sm leading-6 text-slate-600' },
@@ -3266,9 +3355,10 @@
     );
   }
 
-  function StatusPanel({ initialJobId = '', initialEmail = '' }) {
+  function StatusPanel({ initialJobId = '', initialEmail = '', initialShortCode = '' }) {
     const [jobId, setJobId] = useState(initialJobId);
     const [email, setEmail] = useState(initialEmail);
+    const [shortCode, setShortCode] = useState(shortCodeFromText(initialShortCode));
     const [job, setJob] = useState(null);
     const [message, setMessage] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -3276,9 +3366,36 @@
 
     useEffect(() => { if (initialJobId) setJobId(String(initialJobId)); }, [initialJobId]);
     useEffect(() => { if (initialEmail) setEmail(initialEmail); }, [initialEmail]);
+    useEffect(() => {
+      const code = shortCodeFromText(initialShortCode);
+      if (!code) return;
+      setShortCode(code);
+      loadShortlink(code);
+    }, [initialShortCode]);
+
+    async function loadShortlink(value) {
+      const code = shortCodeFromText(value);
+      if (!code) return;
+      setLoading(true);
+      setMessage(null);
+      try {
+        const data = await apiRequest(`shortlink.php?code=${encodeURIComponent(code)}`);
+        setJob(data.job);
+        if (data.job?.id) setJobId(String(data.job.id));
+        setShortCode(data.job?.short_code || code);
+      } catch (error) {
+        setMessage({ type: 'error', text: error.message });
+      } finally {
+        setLoading(false);
+      }
+    }
 
     async function checkStatus(event) {
       event?.preventDefault?.();
+      if (shortCodeFromText(shortCode)) {
+        await loadShortlink(shortCode);
+        return;
+      }
       if (!jobId || !email) return;
       setLoading(true);
       setMessage(null);
@@ -3317,9 +3434,10 @@
     return h('section', { className: 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' },
       h('h2', { className: 'text-lg font-black text-slate-950' }, 'Cek status'),
       h('form', { className: 'mt-4 grid gap-3', onSubmit: checkStatus },
+        h(TextInput, { value: shortCode, onChange: event => setShortCode(event.target.value), placeholder: 'Kode atau URL shortlink' }),
         h(TextInput, { value: jobId, onChange: event => setJobId(event.target.value), placeholder: 'ID job' }),
         h(TextInput, { type: 'email', value: email, onChange: event => setEmail(event.target.value), placeholder: 'Email upload' }),
-        h(Button, { type: 'submit', variant: 'soft', disabled: loading || !jobId || !email }, loading ? 'Mengecek...' : 'Cek')
+        h(Button, { type: 'submit', variant: 'soft', disabled: loading || (!shortCodeFromText(shortCode) && (!jobId || !email)) }, loading ? 'Mengecek...' : 'Cek')
       ),
       h(Notice, { message }),
       job ? h('div', { className: 'mt-4 rounded-2xl bg-slate-50 p-4' },
@@ -3332,11 +3450,12 @@
         ),
         h('div', { className: 'mt-4 h-2 overflow-hidden rounded-full bg-white' }, h('div', { className: 'h-full rounded-full bg-blue-600', style: { width: `${progress}%` } })),
         h('p', { className: 'mt-2 text-xs font-bold text-slate-500' }, `${compactNumber(job.rows_processed || 0)} / ${compactNumber(job.rows_total || 0)} baris`),
+        h(ShortlinkBox, { job }),
         h('div', { className: 'mt-3' }, h(ResultDownloadLinks, { job })),
         job.fix_request ? h('div', { className: 'mt-3 flex items-center justify-between gap-3 rounded-xl bg-white p-3' },
           h('span', { className: 'text-xs font-bold text-slate-600' }, `Pengajuan fix #${job.fix_request.id}`),
           h(Badge, { status: job.fix_request.status }, job.fix_request.status)
-        ) : job.status === 'completed' ? h(Button, { type: 'button', variant: 'success', className: 'mt-3 w-full', disabled: loading, onClick: () => submitFix(false) }, 'Ajukan sebagai fix') : null
+        ) : job.status === 'completed' && email ? h(Button, { type: 'button', variant: 'success', className: 'mt-3 w-full', disabled: loading, onClick: () => submitFix(false) }, 'Ajukan sebagai fix') : null
       ) : null,
       fixConfirm ? h(Modal, { title: 'Konfirmasi fix baru', onClose: () => setFixConfirm(null) },
         h('div', { className: 'grid gap-4' },
@@ -3747,7 +3866,12 @@
             h('tr', null, ['ID', 'File', 'Wilayah', 'Status', 'Upload', 'Progress', 'BNBA/Fix', 'Hasil', 'Aksi'].map(col => h('th', { key: col, className: 'px-3 py-3 text-xs font-black uppercase' }, col)))
           ),
           h('tbody', null, jobs.length ? jobs.map(job => h('tr', { key: job.id, className: 'border-b border-slate-100 odd:bg-white even:bg-slate-50' },
-            h('td', { className: 'px-3 py-3 font-black' }, `#${job.id}`),
+            h('td', { className: 'px-3 py-3' },
+              h('div', { className: 'grid gap-2' },
+                h('span', { className: 'font-black' }, `#${job.id}`),
+                jobShortUrl(job) ? h(CopyShortlinkButton, { url: jobShortUrl(job), compact: true, label: 'Link' }) : null
+              )
+            ),
             h('td', { className: 'max-w-64 break-words px-3 py-3', title: job.original_filename }, job.original_filename),
             h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600' }, [job.community_name, job.target_location, job.target_village, job.target_district, job.target_regency, job.target_province].filter(Boolean).join(', ') || '-'),
             h('td', { className: 'px-3 py-3' }, h(Badge, { status: job.status }, job.status)),
@@ -5090,6 +5214,7 @@
       },
     };
     const heroMeta = heroByTab[tab] || heroByTab.home;
+    const initialShortCode = shortCodeFromLocation();
 
     useEffect(() => {
       let live = true;
@@ -5137,7 +5262,7 @@
           )
         ),
         h('div', { key: tab, className: 'content-stack motion-page' },
-          tab === 'home' ? h(HomeMap, { onOpenArchive: () => switchTab('links'), onStartPadan: startPadanFromMap }) : tab === 'padan' ? h(PadanDataPage, { appConfig, initialRegion: padanSeed }) : tab === 'links' ? h(LinkArchivePage) : tab === 'about' ? h(AboutPage) : h(AdminPage)
+          tab === 'home' ? h(HomeMap, { onOpenArchive: () => switchTab('links'), onStartPadan: startPadanFromMap }) : tab === 'padan' ? h(PadanDataPage, { appConfig, initialRegion: padanSeed, initialShortCode }) : tab === 'links' ? h(LinkArchivePage) : tab === 'about' ? h(AboutPage) : h(AdminPage)
         )
       )
     );

@@ -9,15 +9,17 @@
     <meta name="app-api-base" content="https://lppsp.ui.ac.id/scrt3/api">
     <title>Peta Padan Data KAT</title>
     <script>
-      window.APP_VERSION = '20260602-mail-observability-01';
+      window.APP_VERSION = '20260608-shortlink-01';
       window.APP_CONFIG = window.APP_CONFIG || {};
       window.APP_CONFIG.apiBase = window.APP_CONFIG.apiBase || (/^(localhost|127\.0\.0\.1|::1)$/i.test(window.location.hostname) ? '../api' : 'https://lppsp.ui.ac.id/scrt3/api');
+      window.APP_CONFIG.frontendBase = window.APP_CONFIG.frontendBase || 'https://dit-pskat.github.io';
+      window.APP_CONFIG.shortlinkParam = window.APP_CONFIG.shortlinkParam || 's';
     </script>
-    <link rel="stylesheet" href="./assets/tailwind.generated.css?v=20260602-mail-observability-01">
+    <link rel="stylesheet" href="./assets/tailwind.generated.css?v=20260608-shortlink-01">
     <link rel="stylesheet" href="./assets/vendor/leaflet.css">
     <link rel="stylesheet" href="./assets/vendor/splitting.css">
     <link rel="stylesheet" href="./assets/vendor/splitting-cells.css">
-    <link rel="stylesheet" href="./assets/app.css?v=20260602-mail-observability-01">
+    <link rel="stylesheet" href="./assets/app.css?v=20260608-shortlink-01">
   </head>
   <body>
     <div id="root"></div>
@@ -80,6 +82,6 @@
     <script src="./assets/vendor/gsap.min.js"></script>
     <script src="./assets/vendor/splitting.min.js"></script>
     <script src="./assets/vendor/leaflet.js"></script>
-    <script src="./assets/app.js?v=20260602-mail-observability-01"></script>
+    <script src="./assets/app.js?v=20260608-shortlink-01"></script>
   </body>
 </html>
