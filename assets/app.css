@@ -1286,7 +1286,7 @@ button:disabled {
 }
 
 .region-fieldset:has(.select-control.is-open) {
-  z-index: 1200;
+  z-index: 2600;
 }
 
 .region-grid {
@@ -1299,7 +1299,7 @@ button:disabled {
 }
 
 .region-grid > *:has(.select-control.is-open) {
-  z-index: 1250;
+  z-index: 2650;
 }
 
 .region-note {
@@ -1384,12 +1384,12 @@ button:disabled {
 
 .select-control {
   position: relative;
-  z-index: 20;
+  z-index: 2000;
   min-width: 0;
 }
 
 .select-control.is-open {
-  z-index: 1300;
+  z-index: 2600;
 }
 
 .select-trigger {
@@ -1463,7 +1463,7 @@ button:disabled {
 
 .select-popover {
   position: absolute;
-  z-index: 90;
+  z-index: 2650;
   top: calc(100% + 0.38rem);
   right: 0;
   left: 0;
