@@ -1225,11 +1225,6 @@ button:disabled {
   }
 }
 
-.padan-upload {
-  position: relative;
-  padding: clamp(1rem, 2.5vw, 1.45rem);
-}
-
 .section-head {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
@@ -1318,6 +1313,33 @@ button:disabled {
   border-radius: 1.05rem;
   padding: 0.35rem;
   background: rgba(8, 27, 24, 0.055);
+}
+
+.region-grid > * {
+  position: relative;
+  z-index: 5000;
+  overflow: visible;
+}
+
+.select-control {
+  position: relative;
+  z-index: 6000;
+}
+
+.select-popover {
+  z-index: 7000;
+}
+
+.upload-zone {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.padan-upload.has-open-select .upload-zone {
+  pointer-events: none !important;
+  opacity: 0.25;
+  z-index: 0;
 }
 
 .mode-option {
@@ -1600,6 +1622,8 @@ button:disabled {
 .padan-upload {
   position: relative;
   isolation: isolate;
+  overflow: visible;
+  padding: clamp(1rem, 2.5vw, 1.45rem);
 }
 
 .padan-upload.has-open-select .upload-zone {
