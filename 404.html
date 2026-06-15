@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Membuka shortlink...</title>
+    <script>
+      (function () {
+        var path = window.location.pathname || '';
+        var query = window.location.search || '';
+        var hash = window.location.hash || '';
+        var params = new URLSearchParams(query);
+        if (!params.has('short_path')) params.set('short_path', path);
+        window.location.replace('/?' + params.toString() + hash);
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Membuka shortlink...</p>
+  </body>
+</html>

@@ -58,6 +58,11 @@
     return param || 's';
   }
 
+  function shortlinkPathPrefix() {
+    const prefix = String(publicRuntimeConfig.shortlink_path_prefix || window.APP_CONFIG?.shortlinkPathPrefix || 's').replace(/[^A-Za-z0-9_\-/]/g, '').replace(/^\/+|\/+$/g, '');
+    return prefix || 's';
+  }
+
   function shortCodeFromText(value) {
     const raw = String(value || '').trim();
     if (!raw) return '';
@@ -78,6 +83,25 @@
     return shortCodeFromText(query.get(shortlinkParamName()) || query.get('s') || query.get('code') || '');
   }
 
+  function shortRedirectCodeFromPath(pathname) {
+    const prefixParts = shortlinkPathPrefix().split('/').filter(Boolean).map(part => part.toLowerCase());
+    const parts = String(pathname || '').split('/').filter(Boolean);
+    if (!prefixParts.length || parts.length < prefixParts.length + 1) return '';
+    for (let start = 0; start <= parts.length - prefixParts.length - 1; start += 1) {
+      const matches = prefixParts.every((part, idx) => String(parts[start + idx] || '').toLowerCase() === part);
+      if (matches) {
+        return String(parts[start + prefixParts.length] || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+      }
+    }
+    return '';
+  }
+
+  function shortRedirectCodeFromLocation() {
+    const query = currentQuery();
+    const pathFrom404 = query.get('short_path') || query.get('path') || '';
+    return shortRedirectCodeFromPath(pathFrom404) || shortRedirectCodeFromPath(window.location.pathname || '');
+  }
+
   function jobShortUrl(job) {
     const explicit = String(job?.short_url || '').trim();
     if (explicit) return explicit;
@@ -88,6 +112,15 @@
     const separator = base.includes('?') ? '&' : '?';
     const params = new URLSearchParams({ [shortlinkParamName()]: code });
     return `${base}${separator}${params.toString()}`;
+  }
+
+  function archiveShortUrl(link) {
+    const explicit = String(link?.short_url || '').trim();
+    if (explicit) return explicit;
+    const code = shortCodeFromText(link?.short_code || '');
+    if (!code) return '';
+    const base = String(publicRuntimeConfig.frontend_base_url || window.APP_CONFIG?.frontendBase || window.location.origin).replace(/\/+$/, '');
+    return `${base}/${shortlinkPathPrefix()}/${encodeURIComponent(code)}`;
   }
 
   function resultDownloadUrl(job, file = 'package', adminKey = '') {
@@ -359,10 +392,12 @@
 
   function errorMessage(data, status) {
     const base = data?.error || `Request gagal (${status})`;
+    const remediation = String(data?.remediation || '').trim();
     const retryAfter = Number(data?.retry_after_seconds || 0);
-    if (!retryAfter) return base;
+    const message = remediation && !base.includes(remediation) ? `${base} Solusi: ${remediation}` : base;
+    if (!retryAfter) return message;
     const label = retryAfter >= 60 ? `${Math.ceil(retryAfter / 60)} menit` : `${Math.ceil(retryAfter)} detik`;
-    return `${base} Coba lagi sekitar ${label}.`;
+    return `${message} Coba lagi sekitar ${label}.`;
   }
 
   function freshApiUrl(path) {
@@ -467,15 +502,15 @@
   }
 
   function householdSourceLabel(source) {
-    if (source === 'bnba') return 'Hasil padan BNBA';
-    if (source === 'distribution') return 'Data persebaran';
+    if (source === 'bnba') return 'By padan';
+    if (source === 'distribution') return 'By Excel/persebaran';
     return 'Belum ada angka KK';
   }
 
   function householdSummaryText(row) {
     const metrics = householdMetrics(row);
     const diffText = metrics.delta ? `, selisih ${metrics.delta > 0 ? '+' : ''}${fullNumber(metrics.delta)}` : '';
-    return `Persebaran ${fullNumber(metrics.distribution)} / BNBA ${fullNumber(metrics.bnba)}${diffText}.`;
+    return `KK by Excel ${fullNumber(metrics.distribution)} / KK by padan ${fullNumber(metrics.bnba)}${diffText}. Angka final memakai padan kalau ada, bukan dijumlah.`;
   }
 
   function prefersReducedMotion() {
@@ -604,10 +639,10 @@
       tribe: 'Suku/Komunitas',
       households_spread: 'Persebaran KK',
       sync_year: 'Tahun sinkron Dukcapil',
-      households_total: 'KK efektif',
-      effective_households_total: 'KK efektif',
-      distribution_households_total: 'KK persebaran',
-      bnba_households_total: 'KK hasil padan BNBA',
+      households_total: 'KK final',
+      effective_households_total: 'KK final',
+      distribution_households_total: 'KK by Excel',
+      bnba_households_total: 'KK by padan',
       is_proposed: 'Pengusulan',
       notes: 'Catatan',
       row_hash: 'Hash baris',
@@ -618,6 +653,43 @@
 
   function sourceName(value) {
     return String(value || '').trim() || 'Tanpa sumber';
+  }
+
+  function dataStoreSourceMeta(mode, label = '') {
+    const key = String(mode || '').trim().toLowerCase();
+    const labels = {
+      supabase: 'Supabase',
+      mysql: 'MySQL',
+      sheets: 'Google Sheets',
+      json: 'Big JSON',
+    };
+    const icons = {
+      supabase: 'DatabaseZap',
+      mysql: 'Database',
+      sheets: 'Sheet',
+      json: 'FileJson2',
+    };
+    const tones = {
+      supabase: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+      mysql: 'bg-sky-50 text-sky-700 ring-sky-200',
+      sheets: 'bg-lime-50 text-lime-700 ring-lime-200',
+      json: 'bg-violet-50 text-violet-700 ring-violet-200',
+    };
+    return {
+      key,
+      label: String(label || labels[key] || (key ? key.toUpperCase() : 'Memuat')).trim(),
+      icon: icons[key] || 'CircleHelp',
+      tone: tones[key] || 'bg-slate-50 text-slate-600 ring-slate-200',
+    };
+  }
+
+  function DataStoreSourceBadge({ mode, label, prefix = 'Data', warning = '', className = '' }) {
+    const meta = dataStoreSourceMeta(mode, label);
+    const title = warning ? `${prefix}: ${meta.label}. ${warning}` : `${prefix}: ${meta.label}`;
+    return h('span', {
+      className: cx('inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black ring-1', meta.tone, className),
+      title,
+    }, h(Icon, { name: meta.icon, size: 13 }), h('span', { className: 'truncate' }, `${prefix}: ${meta.label}`));
   }
 
   function sourceFromRow(row) {
@@ -1262,7 +1334,7 @@
     return h('div', { className: 'source-pills flex flex-wrap gap-2' }, rows.map(source => {
       const value = source.source_data || source.label || '';
       const selected = normalizeName(value) === normalizeName(selectedSource);
-      const title = `${value} - ${fullNumber(source.rows || source.count || 0)} baris, ${fullNumber(effectiveHouseholds(source))} KK efektif. ${householdSummaryText(source)}`;
+      const title = `${value} - ${fullNumber(source.rows || source.count || 0)} baris, ${fullNumber(effectiveHouseholds(source))} KK final. ${householdSummaryText(source)}`;
       const content = [
         h(Icon, { key: 'icon', name: selected ? 'CheckCircle2' : 'Database', size: 14 }),
         h('span', { key: 'label', className: 'min-w-0 break-words' }, value),
@@ -1337,16 +1409,16 @@
     );
   }
 
-  function ShortlinkBox({ job, compact = false }) {
-    const url = jobShortUrl(job);
+  function ShortlinkBox({ job, url: explicitUrl = '', compact = false, title = 'Shortlink', copyLabel = '' }) {
+    const url = explicitUrl || jobShortUrl(job);
     if (!url) return null;
     return h('div', { className: cx(compact ? 'mt-2' : 'mt-3', 'rounded-xl bg-white p-3 ring-1 ring-slate-200') },
       h('div', { className: 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between' },
         h('div', { className: 'min-w-0' },
-          h('p', { className: 'text-xs font-black uppercase text-slate-500' }, 'Shortlink'),
+          h('p', { className: 'text-xs font-black uppercase text-slate-500' }, title),
           h('p', { className: 'mt-1 text-xs font-semibold text-slate-700', style: { wordBreak: 'break-all' } }, url)
         ),
-        h(CopyShortlinkButton, { url, compact, label: compact ? 'Copy' : 'Copy shortlink' })
+        h(CopyShortlinkButton, { url, compact, label: copyLabel || (compact ? 'Copy' : 'Copy shortlink') })
       )
     );
   }
@@ -1494,9 +1566,9 @@
         h(LocationField, { icon: 'UsersRound', label: 'Komunitas', value: item.community_name })
       ),
       h('div', { className: 'mt-3 grid grid-cols-2 gap-2 text-xs' },
-        h(MiniMetric, { icon: 'Users', label: 'KK efektif', value: `${fullNumber(households.effective)} KK` }),
-        h(MiniMetric, { icon: 'Database', label: 'KK persebaran', value: `${fullNumber(households.distribution)} KK` }),
-        h(MiniMetric, { icon: 'FileSpreadsheet', label: 'KK hasil padan', value: `${fullNumber(households.bnba)} KK` }),
+        h(MiniMetric, { icon: 'Users', label: 'KK final', value: `${fullNumber(households.effective)} KK` }),
+        h(MiniMetric, { icon: 'Database', label: 'KK by Excel', value: `${fullNumber(households.distribution)} KK` }),
+        h(MiniMetric, { icon: 'FileSpreadsheet', label: 'KK by padan', value: `${fullNumber(households.bnba)} KK` }),
         h(MiniMetric, { icon: 'GitCompareArrows', label: 'Sumber angka', value: householdSourceLabel(households.source) }),
         households.delta ? h(MiniMetric, { icon: 'Activity', label: 'Selisih BNBA', value: `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)} KK` }) : null,
         h(MiniMetric, { icon: 'Database', label: 'Sumber', value: item.source_data || item.type || '-' }),
@@ -1732,9 +1804,9 @@
                       ),
                       h('div', { className: 'stat-detail-counts' },
                         h('span', null, h(Icon, { name: 'LocateFixed', size: 14 }), `${fullNumber(row.locations || 0)} lokasi`),
-                        h('span', { title: householdSummaryText(row) }, h(Icon, { name: 'Users', size: 14 }), `${fullNumber(households.effective)} KK efektif`),
-                        h('span', { title: 'KK pada data persebaran' }, h(Icon, { name: 'Table', size: 14 }), `${fullNumber(households.distribution)} persebaran`),
-                        h('span', { title: 'KK unik dari hasil padan BNBA' }, h(Icon, { name: 'FileSpreadsheet', size: 14 }), `${fullNumber(households.bnba)} BNBA`)
+                        h('span', { title: householdSummaryText(row) }, h(Icon, { name: 'Users', size: 14 }), `${fullNumber(households.effective)} KK final`),
+                        h('span', { title: 'KK dari angka awal Excel/persebaran' }, h(Icon, { name: 'Table', size: 14 }), `${fullNumber(households.distribution)} by Excel`),
+                        h('span', { title: 'KK unik dari hasil padan BNBA' }, h(Icon, { name: 'FileSpreadsheet', size: 14 }), `${fullNumber(households.bnba)} by padan`)
                       )
                     );
                   }
@@ -1758,6 +1830,7 @@
   function LinkArchiveCard({ link, compact = false, admin = false, actions = null }) {
     const host = link.link_host || linkHost(link.url);
     const status = linkStatusLabel(link.status);
+    const shortUrl = archiveShortUrl(link);
     return h('article', { className: cx('link-card', compact && 'is-compact', link.is_pinned && 'is-pinned') },
       h('div', { className: 'link-card-head' },
         h('span', { className: 'link-card-icon' }, h(Icon, { name: link.is_pinned ? 'Pin' : 'Link2', size: 18 })),
@@ -1768,6 +1841,7 @@
         h('a', { href: link.url, target: '_blank', rel: 'noreferrer', className: 'link-card-open', title: 'Buka link' }, h(Icon, { name: 'ExternalLink', size: 16 }))
       ),
       link.description ? h('p', { className: 'link-card-description' }, link.description) : null,
+      shortUrl ? h(ShortlinkBox, { url: shortUrl, compact: true, title: 'Shortlink arsip', copyLabel: 'Copy' }) : null,
       h('div', { className: 'link-card-meta' },
         h(LinkProcessChip, { process: link.process_context }),
         link.is_pinned ? h(Badge, { status: 'pinned' }, 'pinned') : null,
@@ -1995,7 +2069,7 @@
     );
   }
 
-  function HomeMap({ onOpenArchive, onStartPadan }) {
+  function HomeMap({ appConfig, onOpenArchive, onStartPadan }) {
     const mapRef = useRef(null);
     const mapBoxRef = useRef(null);
     const layerRef = useRef(null);
@@ -2351,6 +2425,7 @@
       if (!map || !window.L) return;
       const activeName = scope[level] || scope.village || scope.district || scope.regency || scope.province || 'Wilayah';
       const stats = statsForScope(scope);
+      const statsHouseholds = householdMetrics(stats);
       const content = document.createElement('div');
       content.className = 'kat-popup-card';
       const label = mapLevelLabel(level);
@@ -2361,7 +2436,9 @@
         <div class="kat-popup-path"></div>
         <div class="kat-popup-metrics">
           <span><b>${fullNumber(stats.locations)}</b><small>Lokasi</small></span>
-          <span><b>${fullNumber(stats.households)}</b><small>KK efektif</small></span>
+          <span><b>${fullNumber(statsHouseholds.effective)}</b><small>KK final</small></span>
+          <span><b>${fullNumber(statsHouseholds.distribution)}</b><small>KK by Excel</small></span>
+          <span><b>${fullNumber(statsHouseholds.bnba)}</b><small>KK by padan</small></span>
         </div>
         <div class="kat-popup-actions">
           <button type="button" class="kat-popup-primary" data-map-padan>Padankan wilayah</button>
@@ -2377,6 +2454,7 @@
         setDrillOptions([]);
         setDrillLoading(true);
       });
+      window.L.DomEvent.disableScrollPropagation(content);
       popupRef.current = window.L.popup({ className: 'kat-map-popup', closeButton: true, autoPanPadding: [18, 18], maxWidth: 320 })
         .setLatLng(latlng)
         .setContent(content)
@@ -2602,7 +2680,7 @@
                 ? (statMap.get(normalizeName(name)) || {})
                 : statsForScope(scope);
               const locations = mapLevel === 'province' ? Number(stat.distribution_count || 0) : Number(stat.locations || 0);
-              const households = mapLevel === 'province' ? effectiveHouseholds(stat) : Number(stat.households || 0);
+              const households = householdMetrics(stat);
               layerItem.bindTooltip(`${mapLevelLabel(mapLevel)}: ${name}`, { sticky: true, className: 'kat-map-tooltip' });
               layerItem.on({
                 mouseover(event) {
@@ -2627,7 +2705,7 @@
                   chooseMapRegion(mapLevel, name, event.latlng, meta);
                 },
               });
-              layerItem.options.title = `${name} - ${fullNumber(locations)} lokasi, ${fullNumber(households)} KK efektif`;
+              layerItem.options.title = `${name} - ${fullNumber(locations)} lokasi, ${fullNumber(households.effective)} KK final; ${householdSummaryText(stat)}`;
             },
           }).addTo(map);
           layerRef.current = layer;
@@ -2686,18 +2764,22 @@
     }, [data.province_stats, selectedProvince]);
     const activeSources = data.source_breakdown || [];
     const items = data.items || [];
+    const dataStoreMode = data.data_source || appConfig?.capabilities?.data_store_mode || '';
+    const dataStoreLabel = data.data_source_label || appConfig?.capabilities?.data_store_label || '';
+    const dataStoreWarning = data.warning || '';
+    const dataStoreMeta = dataStoreSourceMeta(dataStoreMode, dataStoreLabel);
     const summaryHouseholds = householdMetrics(summary);
     const summaryDiffLocations = Number(summary.households_bnba_diff_locations || 0);
-    const householdCardSubtitle = `${householdSummaryText(summary)} BNBA menggantikan persebaran bila ada, bukan dijumlah.${summaryDiffLocations ? ` ${fullNumber(summaryDiffLocations)} lokasi beda angka.` : ''}`;
+    const householdCardSubtitle = `${householdSummaryText(summary)}${summaryDiffLocations ? ` ${fullNumber(summaryDiffLocations)} lokasi beda angka.` : ''}`;
     const statCards = [
       { key: 'province', label: 'Persebaran Provinsi', value: summary.province_total, tone: 'blue', icon: 'Map', breakdownKey: 'province', subtitle: 'Provinsi unik setelah normalisasi' },
       { key: 'regency', label: 'Persebaran Kabupaten', value: summary.regency_total, tone: 'cyan', icon: 'Landmark', breakdownKey: 'regency', subtitle: 'Kabupaten/Kota per provinsi' },
       { key: 'district', label: 'Persebaran Kecamatan', value: summary.district_total, tone: 'emerald', icon: 'Network', breakdownKey: 'district', subtitle: 'Kecamatan dikelompokkan per provinsi' },
       { key: 'village', label: 'Persebaran Kelurahan', value: summary.village_total, tone: 'indigo', icon: 'MapPinned', breakdownKey: 'village', subtitle: 'Kelurahan/Desa per kecamatan' },
       { key: 'location', label: 'Jumlah Lokasi', value: summary.location_total || summary.distribution_total, tone: 'violet', icon: 'LocateFixed', breakdownKey: 'location', subtitle: 'Semua lokasi persebaran' },
-      { key: 'households', label: 'KK efektif', value: summaryHouseholds.effective, tone: 'slate', icon: 'Users', breakdownKey: 'location', subtitle: householdCardSubtitle },
-      { key: 'locations_with_households', label: 'Lokasi KK Terisi', value: summary.locations_with_households, tone: 'emerald', icon: 'CheckCircle2', breakdownKey: 'location', subtitle: 'Lokasi dengan KK efektif lebih dari 0', filter: row => effectiveHouseholds(row) > 0 },
-      { key: 'locations_zero_households', label: 'Lokasi KK 0', value: summary.locations_zero_households, tone: 'amber', icon: 'CircleSlash', breakdownKey: 'location', subtitle: 'Lokasi yang masih 0 KK efektif', filter: row => effectiveHouseholds(row) <= 0 },
+      { key: 'households', label: 'KK final', value: summaryHouseholds.effective, tone: 'slate', icon: 'Users', breakdownKey: 'location', subtitle: householdCardSubtitle },
+      { key: 'locations_with_households', label: 'Lokasi KK Terisi', value: summary.locations_with_households, tone: 'emerald', icon: 'CheckCircle2', breakdownKey: 'location', subtitle: 'Lokasi dengan KK final lebih dari 0', filter: row => effectiveHouseholds(row) > 0 },
+      { key: 'locations_zero_households', label: 'Lokasi KK 0', value: summary.locations_zero_households, tone: 'amber', icon: 'CircleSlash', breakdownKey: 'location', subtitle: 'Lokasi yang masih 0 KK final', filter: row => effectiveHouseholds(row) <= 0 },
     ];
     const activeStatDetail = statCards.find(stat => stat.key === statDetailKey) || null;
     const statDetailRows = activeStatDetail
@@ -2741,6 +2823,7 @@
                 h(Icon, { name: mapLoading ? 'LoaderCircle' : mapFeatureCount ? 'MousePointerClick' : 'Layers3', size: 13 }),
                 mapLoading ? 'Memuat layer' : mapFeatureCount ? `${compactNumber(mapFeatureCount)} shape klik` : 'Layer kosong'
               ),
+              h(DataStoreSourceBadge, { mode: dataStoreMode, label: dataStoreLabel, prefix: 'Data peta', warning: dataStoreWarning, className: 'shrink-0' }),
               h('span', { className: 'map-drill-actions' },
                 h('button', { type: 'button', onClick: () => setMapPanelCollapsed(current => !current), title: mapPanelCollapsed ? 'Buka panel mode' : 'Minimize panel mode' }, h(Icon, { name: mapPanelCollapsed ? 'Maximize2' : 'Minimize2', size: 15 })),
                 selectedTrail.length || mapLevel !== 'province' ? h('button', { type: 'button', onClick: stepMapBack, title: 'Kembali satu level' }, h(Icon, { name: 'ChevronLeft', size: 15 })) : null,
@@ -2761,6 +2844,10 @@
         ),
         h('aside', { className: 'map-side-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur-xl' },
           h('div', { className: 'grid gap-3' },
+            h('div', { className: 'flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100' },
+              h('span', { className: 'text-xs font-black uppercase text-slate-500' }, 'Sumber database aktif'),
+              h(DataStoreSourceBadge, { mode: dataStoreMode, label: dataStoreLabel, prefix: 'Data', warning: dataStoreWarning })
+            ),
             h(Field, { label: 'Cari wilayah dan komunitas' },
               h(TextInput, { value: query, onChange: event => setQuery(event.target.value), onKeyDown: event => { if (event.key === 'Enter') loadData(); }, placeholder: 'Contoh: NTB, Bima, Tambora, Labuan Kananga' })
             ),
@@ -2787,11 +2874,12 @@
             ) : null,
             h('div', { className: 'mt-3 grid grid-cols-2 gap-2 text-xs' },
               h(MiniMetric, { icon: 'LocateFixed', label: 'Lokasi', value: fullNumber(activeLocations) }),
-              h(MiniMetric, { icon: 'Users', label: 'KK efektif', value: fullNumber(activeHouseholds) }),
-              h(MiniMetric, { icon: 'Table', label: 'KK persebaran', value: fullNumber(activeDistributionHouseholds) }),
-              h(MiniMetric, { icon: 'FileSpreadsheet', label: 'KK hasil padan', value: fullNumber(activeBnbaHouseholds) }),
+              h(MiniMetric, { icon: 'Users', label: 'KK final', value: fullNumber(activeHouseholds) }),
+              h(MiniMetric, { icon: 'Table', label: 'KK by Excel', value: fullNumber(activeDistributionHouseholds) }),
+              h(MiniMetric, { icon: 'FileSpreadsheet', label: 'KK by padan', value: fullNumber(activeBnbaHouseholds) }),
               activeDiffLocations ? h(MiniMetric, { icon: 'Activity', label: 'Lokasi beda angka', value: fullNumber(activeDiffLocations) }) : null,
-              h(MiniMetric, { icon: 'Database', label: 'Sumber aktif', value: selectedSource || 'Semua' }),
+              h(MiniMetric, { icon: dataStoreMeta.icon, label: 'Database', value: dataStoreMeta.label }),
+              h(MiniMetric, { icon: 'ListFilter', label: 'Filter sumber', value: selectedSource || 'Semua' }),
               h(MiniMetric, { icon: 'ListFilter', label: 'Daftar tampil', value: fullNumber(items.length) })
             ),
             activeSources.length ? h('div', { className: 'mt-3 grid gap-2' },
@@ -2832,9 +2920,9 @@
                 ),
                 item.address ? h('p', { className: 'mt-2 break-words text-xs leading-5 text-slate-600' }, item.address) : null,
                 h('div', { className: 'mt-2 flex flex-wrap items-center gap-2 text-xs font-black text-slate-600' },
-                  h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK efektif`),
-                  households.distribution ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200' }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} persebaran`) : null,
-                  households.bnba ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-200' }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(households.bnba)} BNBA`) : null,
+                  households.distribution ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: householdSummaryText(item) }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} KK by Excel`) : null,
+                  households.bnba ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-200', title: householdSummaryText(item) }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(households.bnba)} KK by padan`) : null,
+                  !households.distribution && !households.bnba && households.effective ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK final`) : null,
                   households.delta ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-200' }, h(Icon, { name: 'Activity', size: 13 }), `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)}`) : null,
                   item.source_data ? h('span', { className: 'max-w-full break-words rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: item.source_data }, item.source_data) : null,
                   item.data_year ? h('span', { className: 'rounded-full bg-white px-2 py-1 ring-1 ring-slate-200' }, item.data_year) : null
@@ -3379,7 +3467,7 @@
       setLoading(true);
       setMessage(null);
       try {
-        const data = await apiRequest(`shortlink.php?code=${encodeURIComponent(code)}`);
+        const data = await apiRequest(`shortlink.php?kind=job&code=${encodeURIComponent(code)}`);
         setJob(data.job);
         if (data.job?.id) setJobId(String(data.job.id));
         setShortCode(data.job?.short_code || code);
@@ -3940,11 +4028,15 @@
     }
 
     async function saveRow() {
+      if (!String(form.province || '').trim()) {
+        setMessage({ type: 'error', text: 'Provinsi wajib diisi sebelum data persebaran disimpan.' });
+        return;
+      }
       setLoading(true);
       try {
         await apiRequest('distribution.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ action: 'save', id: form.id || 0, record: form }) });
         setForm(empty);
-        setMessage({ type: 'info', text: 'Data persebaran tersimpan.' });
+        setMessage({ type: 'info', text: `Data persebaran tersimpan dengan ${compactNumber(form.households_total || form.households_spread || 0)} KK.` });
         await loadRows();
       } catch (error) {
         setMessage({ type: 'error', text: error.message });
@@ -4001,9 +4093,25 @@
         h('h2', { className: 'text-lg font-black text-slate-950' }, 'Data persebaran'),
         h('p', { className: 'mt-1 text-xs font-bold leading-5 text-slate-500' }, 'Field desa, distrik/kecamatan, dan lokasi dibersihkan otomatis saat disimpan atau diimport. Dusun masuk ke lokasi, bukan desa.'),
         h('div', { className: 'mt-4 grid gap-3' },
-          ['source_data', 'data_year', 'province', 'regency', 'district', 'village', 'location', 'tribe', 'households_spread', 'households_total'].map(name =>
-            h(Field, { key: name, label: name.replace(/_/g, ' ') },
-              h(TextInput, { value: form[name] ?? '', onChange: event => setField(name, event.target.value) })
+          [
+            ['source_data', 'Sumber data'],
+            ['data_year', 'Tahun data'],
+            ['province', 'Provinsi (wajib)'],
+            ['regency', 'Kabupaten/Kota'],
+            ['district', 'Kecamatan/Distrik'],
+            ['village', 'Desa/Kelurahan'],
+            ['location', 'Lokasi/Dusun'],
+            ['tribe', 'Suku/Komunitas'],
+            ['households_spread', 'KK menurut data persebaran'],
+            ['households_total', 'Jumlah KK total'],
+          ].map(([name, label]) =>
+            h(Field, { key: name, label },
+              h(TextInput, {
+                value: form[name] ?? '',
+                type: ['data_year', 'households_spread', 'households_total'].includes(name) ? 'number' : 'text',
+                min: ['households_spread', 'households_total'].includes(name) ? '0' : undefined,
+                onChange: event => setField(name, event.target.value),
+              })
             )
           ),
           h('label', { className: 'flex items-center gap-2 text-sm font-bold text-slate-700' }, h('input', { type: 'checkbox', checked: Boolean(form.is_proposed), onChange: event => setField('is_proposed', event.target.checked ? 1 : 0) }), 'Pengusulan'),
@@ -4672,11 +4780,16 @@
 
   function DataStoreAdmin({ adminKey }) {
     const [summary, setSummary] = useState(null);
+    const [driveSummary, setDriveSummary] = useState(null);
+    const [driveFolders, setDriveFolders] = useState({});
     const [message, setMessage] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [driveLoading, setDriveLoading] = useState(false);
     const store = summary?.store || {};
     const counts = store.counts || {};
     const mysqlCounts = summary?.mysql_counts || {};
+    const supabaseCounts = summary?.supabase?.counts || {};
+    const migrationReport = summary?.production_migration_report || null;
     const tableLabels = {
       jobs: 'Jobs',
       workers: 'Workers',
@@ -4687,6 +4800,7 @@
       bnba_records: 'BNBA',
       bnba_fix_requests: 'Fix',
       link_archive: 'Link Archive',
+      site_content: 'Konten Situs',
     };
 
     async function load() {
@@ -4703,13 +4817,21 @@
       }
     }
 
-    async function runAction(action) {
+    async function runAction(action, payload = {}) {
       if (!adminKey) return setMessage({ type: 'error', text: 'Masukkan admin key dulu.' });
+      if (action === 'export_mysql_to_sheets' && !window.confirm('Migrasi akan mengganti isi seluruh tab Google Sheets tujuan dengan data MySQL saat ini. Lanjutkan?')) return;
+      if (action === 'migrate_table' && !window.confirm(`Isi tabel ${payload.table} pada ${payload.destination} akan diganti dengan data dari database aktif. Lanjutkan?`)) return;
+      if (action === 'set_runtime_data_store_mode' && !window.confirm(`Gunakan ${payload.mode} sebagai database aktif untuk semua CRUD?`)) return;
       const labels = {
         export_mysql_to_json: 'Membuat Big JSON dari MySQL...',
+        export_mysql_to_sheets: 'Memigrasikan seluruh tabel MySQL ke Google Sheets...',
+        prepare_sheets: 'Menyiapkan seluruh tab dan header Google Sheets...',
         seed_link_archive: 'Menanam seed Link Archive...',
         seed_link_archive_json: 'Menanam seed Link Archive ke Big JSON...',
         seed_link_archive_mysql: 'Menanam seed Link Archive ke MySQL...',
+        migrate_table: `Memigrasikan tabel ${payload.table || ''}...`,
+        migrate_all_to_supabase: 'Memigrasikan seluruh tabel ke Supabase...',
+        set_runtime_data_store_mode: `Mengaktifkan database ${payload.mode || ''}...`,
       };
       setLoading(true);
       setMessage({ type: 'info', text: labels[action] || 'Memproses data store...' });
@@ -4717,7 +4839,7 @@
         const data = await apiRequest('data_store.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
-          body: JSON.stringify({ action }),
+          body: JSON.stringify({ action, ...payload }),
         }, { timeoutMs: 120000 });
         setSummary(current => ({ ...(current || {}), ...data }));
         setMessage({ type: 'info', text: data.message || 'Data store selesai diperbarui.' });
@@ -4729,55 +4851,243 @@
       }
     }
 
-    useEffect(() => { if (adminKey) load(); }, [adminKey]);
+    async function loadDrive(refresh = false) {
+      if (!adminKey) return;
+      setDriveLoading(true);
+      try {
+        const data = await apiRequest(`google_drive_accounts.php?key=${encodeURIComponent(adminKey)}${refresh ? '&refresh=1' : ''}`);
+        setDriveSummary(data);
+        setDriveFolders(Object.fromEntries((data.accounts || []).map(account => [account.id, account.folder_id || ''])));
+      } catch (error) {
+        setMessage({ type: 'error', text: error.message });
+      } finally {
+        setDriveLoading(false);
+      }
+    }
+
+    async function driveAction(action, account = null, changes = {}) {
+      if (!adminKey) return setMessage({ type: 'error', text: 'Masukkan admin key dulu.' });
+      setDriveLoading(true);
+      try {
+        const data = await apiRequest('google_drive_accounts.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+          body: JSON.stringify({
+            action,
+            account_id: account?.id || '',
+            folder_id: account ? (driveFolders[account.id] || '') : '',
+            enabled: changes.enabled ?? (account?.enabled !== false),
+            storage_mode: changes.storage_mode || '',
+            limit: changes.limit || 10,
+          }),
+        }, { timeoutMs: 120000 });
+        if (action === 'connect_url') {
+          window.location.href = data.url;
+          return;
+        }
+        const migrationDetail = data.migration
+          ? ` Sisa ${fullNumber(data.migration.remaining_files || 0)} file lokal; gagal ${fullNumber(data.migration.failed_jobs || 0)} job.${data.migration.errors?.[0]?.error ? ` Error pertama: ${data.migration.errors[0].error}` : ''}`
+          : '';
+        setMessage({ type: data.migration?.failed_jobs ? 'error' : 'info', text: (data.message || (action === 'update' ? 'Target Google Drive disimpan.' : action === 'disconnect' ? 'Akun Google Drive dilepas.' : 'Aksi Google Drive berhasil.')) + migrationDetail });
+        await loadDrive(true);
+      } catch (error) {
+        setMessage({ type: 'error', text: error.message });
+      } finally {
+        setDriveLoading(false);
+      }
+    }
+
+    useEffect(() => {
+      if (!adminKey) return;
+      load();
+      loadDrive(currentQuery().get('drive') === 'connected');
+      const driveStatus = currentQuery().get('drive');
+      if (driveStatus === 'connected') setMessage({ type: 'info', text: 'Akun Google Drive berhasil dihubungkan.' });
+      if (driveStatus === 'error') setMessage({ type: 'error', text: currentQuery().get('drive_message') || 'Akun Google Drive belum berhasil dihubungkan.' });
+    }, [adminKey]);
 
     const jsonDownload = adminKey ? apiUrl(`data_store.php?download=1&key=${encodeURIComponent(adminKey)}`) : '#';
     const tableKeys = Object.keys(tableLabels);
+    const storeMode = store.mode || '-';
+    const portableLabel = storeMode === 'supabase' ? 'Supabase' : (storeMode === 'sheets' ? 'Google Sheets' : (storeMode === 'json' ? 'Big JSON' : 'Database aktif'));
+    const sheetsWritePreflight = summary?.sheets_write_preflight || null;
+    const sheetsWriteError = sheetsWritePreflight?.errors ? Object.values(sheetsWritePreflight.errors)[0] : '';
+    const storeDescription = storeMode === 'supabase'
+      ? 'CRUD aktif memakai Supabase. Pilihan database runtime dan akun Google Drive juga persisten untuk fungsi serverless.'
+      : storeMode === 'sheets'
+      ? 'CRUD portable memakai satu workbook Google Sheets untuk seluruh tab operasional. Persebaran dapat memakai workbook publik terpisah.'
+      : storeMode === 'json'
+        ? 'CRUD portable sedang memakai satu snapshot Big JSON di storage lokal.'
+        : 'MySQL masih menjadi sumber aktif. Dari panel ini data dapat disalin ke Big JSON atau Google Sheets sebelum mode dipindahkan.';
+    const configuredSheets = Object.values(store.tables || {}).filter(table => table?.spreadsheet_id).length;
 
     return h('section', { className: 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]' },
       h('div', { className: 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' },
         h('div', { className: 'flex items-start justify-between gap-4' },
           h('div', null,
-            h('h2', { className: 'text-lg font-black text-slate-950' }, 'Big JSON data store'),
-            h('p', { className: 'mt-1 max-w-2xl text-sm leading-6 text-slate-500' }, 'Snapshot ini menyimpan tabel operasional ke satu file JSON besar. Saat DATA_STORE_MODE=json, API yang sudah punya fallback akan baca/tulis ke file ini.')
+            h('h2', { className: 'text-lg font-black text-slate-950' }, 'Data store & migrasi'),
+            h('p', { className: 'mt-1 max-w-2xl text-sm leading-6 text-slate-500' }, storeDescription)
           ),
           h('span', { className: 'grid h-11 w-11 place-items-center rounded-xl bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100' }, h(Icon, { name: 'DatabaseZap', size: 21 }))
         ),
         h('div', { className: 'mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4' },
-          h(MiniMetric, { icon: 'ToggleRight', label: 'Mode', value: store.mode || '-' }),
-          h(MiniMetric, { icon: 'HardDrive', label: 'File', value: store.exists ? formatBytes(store.size_bytes || 0) : 'belum ada' }),
+          h(MiniMetric, { icon: 'ToggleRight', label: 'Mode aktif', value: storeMode }),
+          h(MiniMetric, { icon: storeMode === 'sheets' ? 'Sheet' : 'HardDrive', label: storeMode === 'sheets' ? 'Sheet terhubung' : 'Snapshot JSON', value: storeMode === 'sheets' ? fullNumber(configuredSheets) : (store.exists ? formatBytes(store.size_bytes || 0) : 'belum ada') }),
           h(MiniMetric, { icon: 'Clock3', label: 'Updated', value: store.updated_at ? formatDateTime(store.updated_at) : '-' }),
           h(MiniMetric, { icon: 'LibraryBig', label: 'Link seed', value: fullNumber(counts.link_archive || 0) })
         ),
-        h('div', { className: 'mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100' },
+        storeMode !== 'sheets' ? h('div', { className: 'mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100' },
           h('p', { className: 'text-xs font-black uppercase text-slate-500' }, 'Path Big JSON'),
           h('p', { className: 'mt-1 break-all text-sm font-black text-slate-950' }, store.json_relative_path || 'data/bigjson.json'),
           h('p', { className: 'mt-1 break-all text-xs font-semibold text-slate-500' }, store.json_path || '')
+        ) : h('div', { className: 'mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100' },
+          h('p', { className: 'text-xs font-black uppercase text-slate-500' }, 'Konfigurasi Google Sheets'),
+          h('p', { className: 'mt-1 text-sm font-black text-slate-950' }, `${configuredSheets} tabel memiliki spreadsheet ID.`),
+          h('p', { className: cx('mt-1 text-xs font-black leading-5', sheetsWritePreflight?.ok ? 'text-emerald-700' : 'text-rose-700') }, sheetsWritePreflight?.ok
+            ? 'Google Sheets API siap mengakses seluruh workbook tujuan.'
+            : `Belum siap menulis: ${sheetsWriteError || 'akses Google Sheets API belum diuji.'}`),
+          !sheetsWritePreflight?.ok && /404|requested entity was not found/i.test(sheetsWriteError || '') ? h('p', { className: 'mt-1 text-xs font-black leading-5 text-rose-700' }, 'Solusi: bagikan workbook sebagai Editor ke minimal satu akun Google aktif di bagian Google Drive storage.') : null,
+          h('p', { className: 'mt-1 text-xs font-semibold leading-5 text-slate-500' }, 'Gunakan satu worker saat seluruh queue memakai Sheets karena Google Sheets tidak memiliki transaksi lintas-server.')
         ),
         h('div', { className: 'mt-4 flex flex-wrap gap-2' },
           h(Button, { type: 'button', variant: 'soft', className: 'gap-2', disabled: loading || !adminKey, onClick: load }, h(Icon, { name: loading ? 'LoaderCircle' : 'RefreshCcw', size: 16 }), loading ? 'Memuat...' : 'Refresh'),
-          h(Button, { type: 'button', variant: 'blue', className: 'gap-2', disabled: loading || !adminKey || store.mode === 'json', onClick: () => runAction('export_mysql_to_json') }, h(Icon, { name: 'FileJson2', size: 16 }), 'Export MySQL ke Big JSON'),
+          h(Button, { type: 'button', variant: 'success', className: 'gap-2', disabled: loading || !adminKey, onClick: () => runAction('prepare_sheets') }, h(Icon, { name: 'TableProperties', size: 16 }), 'Siapkan tab Sheets'),
+          h(Button, { type: 'button', variant: 'blue', className: 'gap-2', disabled: loading || !adminKey || sheetsWritePreflight?.ok === false, onClick: () => runAction('export_mysql_to_sheets') }, h(Icon, { name: 'Sheet', size: 16 }), 'Migrasi MySQL ke Sheets'),
+          h(Button, { type: 'button', variant: 'blue', className: 'gap-2', disabled: loading || !adminKey || !summary?.supabase?.configured, onClick: () => runAction('migrate_all_to_supabase', { source: storeMode }) }, h(Icon, { name: 'DatabaseZap', size: 16 }), 'Migrasi semua ke Supabase'),
+          h(Button, { type: 'button', variant: 'soft', className: 'gap-2', disabled: loading || !adminKey || storeMode !== 'mysql', onClick: () => runAction('export_mysql_to_json') }, h(Icon, { name: 'FileJson2', size: 16 }), 'Snapshot Big JSON'),
           h(Button, { type: 'button', variant: 'success', className: 'gap-2', disabled: loading || !adminKey, onClick: () => runAction('seed_link_archive') }, h(Icon, { name: 'Sprout', size: 16 }), 'Seed Link Archive'),
-          h('a', { href: jsonDownload, className: 'inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50' }, h(Icon, { name: 'Download', size: 16 }), 'Download JSON')
+          store.exists ? h('a', { href: jsonDownload, className: 'inline-flex h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50' }, h(Icon, { name: 'Download', size: 16 }), 'Download JSON') : null
         ),
+        h('div', { className: 'mt-4 border-t border-slate-100 pt-4' },
+          h('p', { className: 'text-xs font-black uppercase text-slate-500' }, 'Database aktif'),
+          h('div', { className: 'mt-2 flex flex-wrap gap-2' },
+            ['supabase', 'mysql', 'sheets', 'json'].map(mode => h(Button, {
+              key: mode,
+              type: 'button',
+              variant: storeMode === mode ? 'blue' : 'soft',
+              disabled: loading || !adminKey || storeMode === mode || (mode === 'supabase' && !summary?.supabase?.configured),
+              onClick: () => runAction('set_runtime_data_store_mode', { mode }),
+            }, mode === 'supabase' ? 'Supabase' : mode === 'sheets' ? 'Google Sheets' : mode === 'json' ? 'Big JSON' : 'MySQL'))
+          )
+        ),
+        migrationReport ? h('div', { className: 'mt-4 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200' },
+          h('p', { className: 'text-xs font-black uppercase text-amber-800' }, 'Audit migrasi produksi'),
+          h('p', { className: 'mt-1 text-xs font-semibold leading-5 text-amber-900' },
+            `Dipulihkan: ${fullNumber(migrationReport.recovered_counts?.jobs || 0)} job, ${fullNumber(migrationReport.recovered_counts?.job_events || 0)} event, ${fullNumber(migrationReport.recovered_counts?.kat_distribution_records || 0)} persebaran, dan ${fullNumber(migrationReport.recovered_counts?.bnba_records || 0)} BNBA.`),
+          migrationReport.unrecoverable_counts?.bnba_records ? h('p', { className: 'mt-1 text-xs font-black leading-5 text-rose-700' },
+            `${fullNumber(migrationReport.unrecoverable_counts.bnba_records)} baris BNBA lama belum dapat dipulihkan karena API produksi tidak mengekspos isi barisnya.`) : null
+        ) : null,
         h('div', { className: 'mt-4' }, h(Notice, { message }))
       ),
       h('div', { className: 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' },
-        h('h2', { className: 'text-lg font-black text-slate-950' }, 'Table counts'),
+        h('h2', { className: 'text-lg font-black text-slate-950' }, 'Tabel & migrasi'),
         h('div', { className: 'mt-4 grid gap-2' },
-          tableKeys.map(key => h('div', { key, className: 'grid grid-cols-[minmax(0,1fr)_80px_80px] items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100' },
-            h('span', { className: 'break-words text-xs font-black text-slate-700', title: tableLabels[key] }, tableLabels[key]),
-            h('span', { className: 'text-right text-xs font-black text-indigo-700', title: 'Big JSON' }, fullNumber(counts[key] || 0)),
-            h('span', { className: 'text-right text-xs font-black text-slate-500', title: mysqlCounts[key]?.ok ? 'MySQL' : (mysqlCounts[key]?.error || 'MySQL tidak dicek') }, mysqlCounts[key]?.ok ? fullNumber(mysqlCounts[key].total || 0) : '-')
+          tableKeys.map(key => h('div', { key, className: 'rounded-xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100' },
+            h('div', { className: 'flex items-center justify-between gap-3' },
+              h('span', { className: 'break-words text-xs font-black text-slate-700', title: tableLabels[key] }, tableLabels[key]),
+              h('div', { className: 'flex items-center gap-3 text-right text-[11px] font-black' },
+                h('span', { className: 'text-indigo-700', title: portableLabel }, `Aktif ${counts[key] === null ? 'error' : fullNumber(counts[key] || 0)}`),
+                h('span', { className: 'text-emerald-700', title: 'Supabase' }, `Supa ${supabaseCounts[key] == null ? '-' : fullNumber(supabaseCounts[key])}`),
+                h('span', { className: 'text-slate-500', title: mysqlCounts[key]?.ok ? 'MySQL' : (mysqlCounts[key]?.error || 'MySQL tidak dicek') }, `SQL ${mysqlCounts[key]?.ok ? fullNumber(mysqlCounts[key].total || 0) : '-'}`)
+              )
+            ),
+            h('div', { className: 'mt-2 flex flex-wrap gap-1.5' },
+              h(Button, { type: 'button', variant: 'soft', disabled: loading || storeMode === 'supabase' || !summary?.supabase?.configured, onClick: () => runAction('migrate_table', { table: key, source: 'active', destination: 'supabase' }) }, 'Ke Supabase'),
+              h(Button, { type: 'button', variant: 'soft', disabled: loading || storeMode === 'sheets', onClick: () => runAction('migrate_table', { table: key, source: 'active', destination: 'sheets' }) }, 'Ke Sheets'),
+              h('a', { href: adminKey ? apiUrl(`data_store.php?download_table=${encodeURIComponent(key)}&source=active&key=${encodeURIComponent(adminKey)}`) : '#', className: 'inline-flex h-9 items-center gap-1 rounded-lg bg-white px-3 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100' }, h(Icon, { name: 'Download', size: 14 }), 'Excel')
+            )
           ))
         ),
-        h('p', { className: 'mt-4 text-xs font-semibold leading-5 text-slate-500' }, 'Kolom kiri angka Big JSON, kolom kanan angka MySQL saat mode database aktif.')
+        h('p', { className: 'mt-4 text-xs font-semibold leading-5 text-slate-500' }, 'Migrasi per tabel mengganti isi tabel tujuan saja. Export Excel selalu mengambil database yang sedang aktif.')
+      ),
+      h('section', { className: 'xl:col-span-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' },
+        h('div', { className: 'flex flex-wrap items-start justify-between gap-3' },
+          h('div', null,
+            h('h2', { className: 'text-lg font-black text-slate-950' }, 'Google Drive storage'),
+            h('p', { className: 'mt-1 text-sm font-semibold text-slate-500' }, driveSummary?.configured
+              ? `${fullNumber(driveSummary.account_count || 0)} akun terhubung, ${fullNumber(driveSummary.enabled_count || 0)} aktif sebagai target storage.`
+              : `Belum siap: ${(driveSummary?.missing_env || ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_TOKEN_ENCRYPTION_KEY']).join(', ')}`),
+            h('p', { className: 'mt-1 text-xs font-semibold leading-5 text-slate-500' }, 'Akun yang dihubungkan juga dipakai untuk membaca dan menulis workbook Sheets bila service account tidak tersedia. Hubungkan ulang akun lama untuk memberikan izin Sheets.')
+          ),
+          h('div', { className: 'flex flex-wrap gap-2' },
+            h(Button, { type: 'button', variant: 'soft', className: 'gap-2', disabled: driveLoading || !adminKey, onClick: () => loadDrive(true) }, h(Icon, { name: driveLoading ? 'LoaderCircle' : 'RefreshCcw', size: 16 }), 'Refresh kuota'),
+            h(Button, {
+              type: 'button',
+              variant: 'success',
+              className: 'gap-2',
+              disabled: driveLoading || !adminKey || !(driveSummary?.enabled_count > 0),
+              onClick: () => {
+                if (window.confirm('Pindahkan maksimal 10 job lokal ke seluruh target Drive aktif? Metadata job diperbarui dulu sebelum file lokal dihapus.')) {
+                  driveAction('migrate_job_files', null, { limit: 10 });
+                }
+              },
+            }, h(Icon, { name: 'FolderSync', size: 16 }), 'Migrasikan file job lama'),
+            h(Button, { type: 'button', variant: 'blue', className: 'gap-2', disabled: driveLoading || !adminKey || !driveSummary?.configured, onClick: () => driveAction('connect_url') }, h(Icon, { name: 'UserPlus', size: 16 }), 'Hubungkan akun')
+          )
+        ),
+        h('div', { className: 'mt-4 grid gap-3 sm:grid-cols-3' },
+          h(MiniMetric, { icon: 'Users', label: 'Akun terhubung', value: fullNumber(driveSummary?.account_count || 0) }),
+          h(MiniMetric, { icon: 'HardDrive', label: 'Total kapasitas', value: driveSummary?.quota?.limit ? formatBytes(driveSummary.quota.limit) : '-' }),
+          h(MiniMetric, { icon: 'DatabaseBackup', label: 'Sisa terukur', value: driveSummary?.quota?.free != null ? formatBytes(driveSummary.quota.free) : '-' })
+        ),
+        h('div', { className: 'mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4' },
+          h('div', { className: 'flex flex-wrap items-start justify-between gap-3' },
+            h('div', null,
+              h('p', { className: 'text-xs font-black uppercase text-slate-500' }, 'Lokasi upload baru'),
+              h('p', { className: cx('mt-1 text-sm font-black', driveSummary?.storage_mode === 'local' ? 'text-amber-700' : 'text-emerald-700') },
+                driveSummary?.storage_mode === 'drive'
+                  ? 'Google Drive aktif'
+                  : driveSummary?.storage_mode === 'hybrid'
+                    ? 'Hybrid aktif: server + Google Drive'
+                    : 'Lokal aktif: file belum dikirim ke Google Drive')
+            ),
+            h('div', { className: 'inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white p-1' },
+              ['local', 'drive', 'hybrid'].map(mode => h('button', {
+                key: mode,
+                type: 'button',
+                disabled: driveLoading || !adminKey || (mode !== 'local' && !(driveSummary?.enabled_count > 0)),
+                onClick: () => driveAction('set_storage_mode', null, { storage_mode: mode }),
+                className: cx('h-9 px-3 text-xs font-black transition', driveSummary?.storage_mode === mode ? 'rounded-md bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100', 'disabled:cursor-not-allowed disabled:opacity-40'),
+              }, mode === 'local' ? 'Lokal' : mode === 'drive' ? 'Drive' : 'Hybrid'))
+            )
+          ),
+          h('p', { className: 'mt-2 text-xs font-semibold leading-5 text-slate-500' }, driveSummary?.storage_mode === 'drive'
+            ? 'Draft, input padan, dan hasil baru disimpan ke seluruh target Drive aktif.'
+            : driveSummary?.storage_mode === 'hybrid'
+              ? 'Draft, input padan, dan hasil baru memiliki salinan lokal serta replika Drive.'
+              : 'Akun Drive boleh sudah terhubung, tetapi upload tetap berada di server sampai mode Drive atau Hybrid dipilih.')
+        ),
+        h('div', { className: 'mt-4 grid gap-3 lg:grid-cols-2' },
+          (driveSummary?.accounts || []).map(account => {
+            const quota = account.quota || {};
+            return h('article', { key: account.id, className: 'rounded-xl border border-slate-200 bg-slate-50 p-4' },
+              h('div', { className: 'flex items-start justify-between gap-3' },
+                h('div', { className: 'min-w-0' },
+                  h('strong', { className: 'block break-all text-sm font-black text-slate-950' }, account.email || account.display_name || 'Akun Google Drive'),
+                  h('span', { className: 'mt-1 block text-xs font-bold text-slate-500' }, quota.limit ? `${formatBytes(quota.usage)} terpakai dari ${formatBytes(quota.limit)} (${fullNumber(quota.percent_used || 0)}%)` : `${formatBytes(quota.usage || 0)} terpakai; batas tidak dilaporkan Google`)
+                ),
+                h(Badge, { status: account.last_error ? 'failed' : account.enabled ? 'checked' : 'pending' }, account.last_error ? 'error' : account.enabled ? 'aktif' : 'nonaktif')
+              ),
+              account.last_error ? h('p', { className: 'mt-2 text-xs font-bold text-rose-600' }, account.last_error) : null,
+              h('div', { className: 'mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]' },
+                h(TextInput, { value: driveFolders[account.id] ?? account.folder_id ?? '', onChange: event => setDriveFolders(current => ({ ...current, [account.id]: event.target.value })), placeholder: 'Folder ID Drive; kosong = My Drive' }),
+                h(Button, { type: 'button', variant: 'soft', className: 'gap-2', disabled: driveLoading, onClick: () => driveAction('update', account) }, h(Icon, { name: 'Save', size: 15 }), 'Simpan')
+              ),
+              h('div', { className: 'mt-3 flex flex-wrap gap-2' },
+                h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', disabled: driveLoading, onClick: () => driveAction('test_upload', account) }, h(Icon, { name: 'UploadCloud', size: 14 }), 'Uji upload'),
+                h(Button, { type: 'button', variant: account.enabled ? 'soft' : 'success', className: 'h-9 gap-2 px-3 text-xs', disabled: driveLoading, onClick: () => driveAction('update', account, { enabled: !account.enabled }) }, h(Icon, { name: account.enabled ? 'Pause' : 'Play', size: 14 }), account.enabled ? 'Nonaktifkan' : 'Aktifkan'),
+                h(Button, { type: 'button', variant: 'danger', className: 'h-9 gap-2 px-3 text-xs', disabled: driveLoading, onClick: () => { if (window.confirm(`Lepas akun ${account.email || account.display_name || ''}?`)) driveAction('disconnect', account); } }, h(Icon, { name: 'Unplug', size: 14 }), 'Lepas')
+              )
+            );
+          }),
+          driveSummary?.configured && !(driveSummary.accounts || []).length ? h('div', { className: 'rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500 lg:col-span-2' }, 'Belum ada akun Drive terhubung.') : null
+        )
       )
     );
   }
 
   function LinkArchiveAdmin({ adminKey }) {
-    const empty = { title: '', url: '', description: '', process_context: 'Data', status: 'approved', is_pinned: 0, pin_order: 0, submitted_by_name: 'admin', submitted_by_email: '', review_note: '' };
+    const empty = { title: '', url: '', short_code: '', description: '', process_context: 'Data', status: 'approved', is_pinned: 0, pin_order: 0, submitted_by_name: 'admin', submitted_by_email: '', review_note: '' };
     const [links, setLinks] = useState([]);
     const [summary, setSummary] = useState({});
     const [form, setForm] = useState(empty);
@@ -4798,7 +5108,7 @@
         const data = await apiRequest(`link_archive.php?${params.toString()}`);
         setLinks(data.links || []);
         setSummary(data.summary || {});
-        if (data.fallback_storage) setMessage({ type: 'info', text: 'Arsip link memakai storage lokal demo karena database belum aktif.' });
+        if (data.warning) setMessage({ type: 'info', text: data.warning });
       } catch (error) {
         setMessage({ type: 'error', text: error.message });
       } finally {
@@ -4885,6 +5195,7 @@
         h('div', { className: 'mt-4 grid gap-3' },
           h(Field, { label: 'Judul link' }, h(TextInput, { value: form.title ?? '', onChange: event => setField('title', event.target.value), placeholder: 'Template asesmen awal' })),
           h(Field, { label: 'URL link' }, h(TextInput, { value: form.url ?? '', onChange: event => setField('url', event.target.value), placeholder: 'https://...' })),
+          h(Field, { label: 'Kode shortlink (opsional)' }, h(TextInput, { value: form.short_code ?? '', onChange: event => setField('short_code', event.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 24)), placeholder: 'acmw' })),
           h(Field, { label: 'Proses' }, h(TextInput, { value: form.process_context ?? '', onChange: event => setField('process_context', event.target.value), list: 'link-process-options-admin', placeholder: 'Data, persiapan, monitoring...' })),
           h('datalist', { id: 'link-process-options-admin' }, processOptions.map(item => h('option', { key: item, value: item }))),
           h(Field, { label: 'Deskripsi' }, h(TextArea, { value: form.description ?? '', onChange: event => setField('description', event.target.value), placeholder: 'Konteks penggunaan link' })),
@@ -5109,6 +5420,7 @@
     const [tab, setTab] = useState(readInitialTab);
     const [appConfig, setAppConfig] = useState({ max_upload_bytes: 26214400, allowed_extensions: SUPPORTED_EXTENSIONS });
     const [padanSeed, setPadanSeed] = useState(null);
+    const [shortRedirect, setShortRedirect] = useState(null);
     const heroShaderRef = useRef(null);
     const workbenchRef = useRef(null);
     useDesignMotion();
@@ -5214,7 +5526,10 @@
       },
     };
     const heroMeta = heroByTab[tab] || heroByTab.home;
+    const activeDataStoreMode = appConfig?.capabilities?.data_store_mode || '';
+    const activeDataStoreLabel = appConfig?.capabilities?.data_store_label || '';
     const initialShortCode = shortCodeFromLocation();
+    const redirectCode = shortRedirectCodeFromLocation();
 
     useEffect(() => {
       let live = true;
@@ -5226,6 +5541,34 @@
         .catch(() => {});
       return () => { live = false; };
     }, []);
+
+    useEffect(() => {
+      if (!redirectCode) return;
+      let live = true;
+      setShortRedirect({ type: 'loading', text: `Membuka shortlink /${shortlinkPathPrefix()}/${redirectCode}...` });
+      apiRequest(`shortlink.php?kind=link&code=${encodeURIComponent(redirectCode)}`)
+        .then(data => {
+          if (!live) return;
+          if (data.redirect_url) {
+            setShortRedirect({ type: 'loading', text: 'Shortlink ditemukan. Mengalihkan ke link tujuan...' });
+            window.location.replace(data.redirect_url);
+            return;
+          }
+          if (data.job) {
+            const params = new URLSearchParams({ upload: '1', [shortlinkParamName()]: redirectCode });
+            window.history.replaceState(null, '', `?${params.toString()}`);
+            setShortRedirect({ type: 'info', text: 'Kode ini adalah shortlink job. Membuka panel status...' });
+            setTab('padan');
+            scrollWorkbench();
+            return;
+          }
+          setShortRedirect({ type: 'error', text: 'Shortlink tidak ditemukan.' });
+        })
+        .catch(error => {
+          if (live) setShortRedirect({ type: 'error', text: error.message || 'Shortlink tidak bisa dibuka.' });
+        });
+      return () => { live = false; };
+    }, [redirectCode]);
 
     return h('div', { className: cx('site-canvas min-h-screen text-slate-900', `site-canvas-${tab}`), 'data-tab': tab },
       h('section', { className: 'hero-pin' },
@@ -5247,12 +5590,21 @@
         )
       ),
       h('div', { ref: workbenchRef, className: 'app-workbench mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8' },
+        shortRedirect ? h('div', { className: cx('mb-5 rounded-2xl border p-4 text-sm font-bold shadow-sm', shortRedirect.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-sky-200 bg-sky-50 text-sky-700') },
+          h('span', { className: 'inline-flex items-center gap-2' },
+            h(Icon, { name: shortRedirect.type === 'error' ? 'CircleAlert' : 'Link2', size: 16 }),
+            shortRedirect.text
+          )
+        ) : null,
         h('header', { className: 'app-dock mb-5' },
           h('div', { className: 'dock-brand' },
             h('span', { className: 'dock-mark about-signature-mark dock-signature-mark' }, 'KAT'),
             h('div', null,
               h('p', { className: 'dock-eyebrow' }, 'Ruang kerja'),
-              h('strong', { className: 'dock-title' }, tab === 'home' ? 'Peta operasional' : tab === 'padan' ? 'Padan data BNBA' : tab === 'links' ? 'Arsip link' : tab === 'about' ? 'Tentang project' : 'Admin data KAT')
+              h('div', { className: 'flex flex-wrap items-center gap-2' },
+                h('strong', { className: 'dock-title' }, tab === 'home' ? 'Peta operasional' : tab === 'padan' ? 'Padan data BNBA' : tab === 'links' ? 'Arsip link' : tab === 'about' ? 'Tentang project' : 'Admin data KAT'),
+                h(DataStoreSourceBadge, { mode: activeDataStoreMode, label: activeDataStoreLabel, prefix: 'Data' })
+              )
             )
           ),
           h('div', { className: 'dock-menu' },
@@ -5262,7 +5614,7 @@
           )
         ),
         h('div', { key: tab, className: 'content-stack motion-page' },
-          tab === 'home' ? h(HomeMap, { onOpenArchive: () => switchTab('links'), onStartPadan: startPadanFromMap }) : tab === 'padan' ? h(PadanDataPage, { appConfig, initialRegion: padanSeed, initialShortCode }) : tab === 'links' ? h(LinkArchivePage) : tab === 'about' ? h(AboutPage) : h(AdminPage)
+          tab === 'home' ? h(HomeMap, { appConfig, onOpenArchive: () => switchTab('links'), onStartPadan: startPadanFromMap }) : tab === 'padan' ? h(PadanDataPage, { appConfig, initialRegion: padanSeed, initialShortCode }) : tab === 'links' ? h(LinkArchivePage) : tab === 'about' ? h(AboutPage) : h(AdminPage)
         )
       )
     );
