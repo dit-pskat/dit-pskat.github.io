@@ -3122,7 +3122,6 @@
           disabled,
           searchable: true,
           allowCustom: true,
-          style: { zIndex: openSelect === level ? 10 : undefined },
           searchPlaceholder: `Cari ${label.toLowerCase()}...`,
           customOptionLabel: text => `Gunakan "${text}" sebagai ${label}`,
           onSearch: text => load(level, scopedParams(level), text),
