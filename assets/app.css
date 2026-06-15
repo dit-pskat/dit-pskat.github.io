@@ -1583,6 +1583,7 @@ button:disabled {
 }
 
 .upload-zone {
+  display: block;
   position: relative;
   z-index: 0;
   overflow: hidden;
@@ -1598,6 +1599,7 @@ button:disabled {
    supported in modern browsers. */
 .padan-upload:has(.select-control.is-open) .upload-zone {
   z-index: -1 !important;
+  display:none;
   pointer-events: none !important;
 }
 
