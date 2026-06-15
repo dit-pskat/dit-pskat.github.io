@@ -3342,6 +3342,14 @@
               h(TextInput, { type: 'email', value: email, onChange: event => setEmail(event.target.value), placeholder: emailPlaceholder(appConfig), required: true })
             )
           ),
+          h('div', { className: 'mt-4' },
+            h(FileDropzone, {
+              file,
+              onFile: setFile,
+              accept: (appConfig.allowed_extensions || SUPPORTED_EXTENSIONS).map(ext => `.${ext}`).join(','),
+              hint: `Maks ${formatBytes(appConfig.max_upload_bytes)}. Preview sheet dan kolom akan muncul setelah file dibaca.`,
+            })
+          ),
           h('div', { className: 'mode-switch mt-4', role: 'group', 'aria-label': 'Mode pengecekan' },
             h('button', { type: 'button', className: cx('mode-option', jobMode === 'nik_only' && 'is-active'), onClick: () => changeJobMode('nik_only') },
               h('span', { className: 'mode-option-title' }, 'Cek NIK saja'),
@@ -3361,14 +3369,6 @@
             h('button', { type: 'button', className: 'padan-context-clear', onClick: () => setRegionContext(null), title: 'Sembunyikan konteks' }, h(Icon, { name: 'X', size: 15 }))
           ) : null,
           needsRegion ? h('div', { className: 'mt-4' }, h(RegionFields, { value: region, onChange: setRegion })) : null,
-          h('div', { className: 'mt-4' },
-            h(FileDropzone, {
-              file,
-              onFile: setFile,
-              accept: (appConfig.allowed_extensions || SUPPORTED_EXTENSIONS).map(ext => `.${ext}`).join(','),
-              hint: `Maks ${formatBytes(appConfig.max_upload_bytes)}. Preview sheet dan kolom akan muncul setelah file dibaca.`,
-            })
-          ),
           progress !== null ? h('div', { className: 'mt-4 h-2 overflow-hidden rounded-full bg-slate-100' }, h('div', { className: 'h-full rounded-full bg-blue-600', style: { width: `${progress}%`, transition: 'width 220ms cubic-bezier(0.2, 0.8, 0.2, 1)' } })) : null,
           h('div', { className: 'action-row mt-4' }, h(Button, { type: 'submit', variant: 'blue', disabled: loading }, loading ? 'Membaca...' : 'Upload dan preview'))
         ),
