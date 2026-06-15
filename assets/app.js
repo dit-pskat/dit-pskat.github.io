@@ -2946,7 +2946,7 @@
     );
   }
 
-  function RegionFields({ value, onChange }) {
+  function RegionFields({ value, onChange, openSelect, setOpenSelect }) {
     const [options, setOptions] = useState({ province: [], regency: [], district: [], village: [], location: [], community: [] });
     const [loading, setLoading] = useState({});
     const update = patch => onChange({ ...value, ...patch });
@@ -3122,6 +3122,7 @@
           disabled,
           searchable: true,
           allowCustom: true,
+          style: { zIndex: openSelect === level ? 10 : undefined },
           searchPlaceholder: `Cari ${label.toLowerCase()}...`,
           customOptionLabel: text => `Gunakan "${text}" sebagai ${label}`,
           onSearch: text => load(level, scopedParams(level), text),
@@ -3368,7 +3369,7 @@
             ),
             h('button', { type: 'button', className: 'padan-context-clear', onClick: () => setRegionContext(null), title: 'Sembunyikan konteks' }, h(Icon, { name: 'X', size: 15 }))
           ) : null,
-          needsRegion ? h('div', { className: 'mt-4' }, h(RegionFields, { value: region, onChange: setRegion })) : null,
+          needsRegion ? h('div', { className: 'mt-4' }, h(RegionFields, { value: region, onChange: setRegion, openSelect, setOpenSelect })) : null,
           h('div', { className: 'mt-4' },
             h(FileDropzone, {
               file,
