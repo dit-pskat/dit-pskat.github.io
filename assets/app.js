@@ -1008,7 +1008,6 @@
     searchable = false,
     onSearch,
     onSelectOption,
-    onOpenChange,
     searchPlaceholder = 'Cari pilihan...',
     allowCustom = false,
     customOptionLabel = text => `Gunakan "${text}"`,
@@ -1053,11 +1052,6 @@
     useEffect(() => {
       if (disabled) setOpen(false);
     }, [disabled]);
-
-    useEffect(() => {
-      onOpenChange?.(open);
-      return () => onOpenChange?.(false);
-    }, [open, onOpenChange]);
 
     useEffect(() => {
       onSearchRef.current = onSearch;
@@ -2946,7 +2940,7 @@
     );
   }
 
-  function RegionFields({ value, onChange, openSelect = '', setOpenSelect = () => {} }) {
+  function RegionFields({ value, onChange }) {
     const [options, setOptions] = useState({ province: [], regency: [], district: [], village: [], location: [], community: [] });
     const [loading, setLoading] = useState({});
     const update = patch => onChange({ ...value, ...patch });
@@ -3127,7 +3121,6 @@
           onSearch: text => load(level, scopedParams(level), text),
           onChange: event => { if (!event.target.value) changeLevel(level, ''); },
           onSelectOption: selected => changeLevel(level, selected?.name || '', selected),
-          onOpenChange: isOpen => setOpenSelect(isOpen ? level : ''),
         },
           h('option', { value: '' }, loading[level] ? 'Memuat...' : placeholder),
           selectOptions(level)
@@ -3158,7 +3151,6 @@
   }
 
   function PadanDataPage({ appConfig, initialRegion, initialShortCode = '' }) {
-    const [openSelect, setOpenSelect] = useState('');
     const [email, setEmail] = useState('');
     const [file, setFile] = useState(null);
     const [draft, setDraft] = useState(null);
@@ -3337,7 +3329,7 @@
 
     return h('main', { className: 'padan-layout' },
       h('section', { className: 'grid gap-5' },
-        h('form', { className: cx( 'panel panel-solid padan-upload', openSelect && 'has-open-select' ), onSubmit: uploadDraft },
+        h('form', { className: 'panel panel-solid padan-upload', onSubmit: uploadDraft },
           h('div', { className: 'section-head' },
             h('div', null,
               h('p', { className: 'section-kicker' }, needsRegion ? 'Pilih wilayah lalu unggah' : 'Unggah file NIK'),
@@ -3368,7 +3360,7 @@
             ),
             h('button', { type: 'button', className: 'padan-context-clear', onClick: () => setRegionContext(null), title: 'Sembunyikan konteks' }, h(Icon, { name: 'X', size: 15 }))
           ) : null,
-          needsRegion ? h('div', { className: 'mt-4' }, h(RegionFields, { value: region, onChange: setRegion, openSelect, setOpenSelect })) : null,
+          needsRegion ? h('div', { className: 'mt-4' }, h(RegionFields, { value: region, onChange: setRegion })) : null,
           h('div', { className: 'mt-4' },
             h(FileDropzone, {
               file,
