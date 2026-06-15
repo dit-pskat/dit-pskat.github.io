@@ -1226,7 +1226,6 @@ button:disabled {
 }
 
 .padan-upload {
-  position: relative;
   padding: clamp(1rem, 2.5vw, 1.45rem);
 }
 
@@ -1279,27 +1278,13 @@ button:disabled {
 }
 
 .region-fieldset {
-  position: relative;
-  z-index: 2;
   display: grid;
   gap: 0.65rem;
-}
-
-.region-fieldset:has(.select-control.is-open) {
-  z-index: 2600;
 }
 
 .region-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15.5rem), 1fr));
   align-items: start;
-}
-
-.region-grid > * {
-  position: relative;
-}
-
-.region-grid > *:has(.select-control.is-open) {
-  z-index: 2650;
 }
 
 .region-note {
@@ -1384,12 +1369,12 @@ button:disabled {
 
 .select-control {
   position: relative;
-  z-index: 2000;
+  z-index: 20;
   min-width: 0;
 }
 
 .select-control.is-open {
-  z-index: 2600;
+  z-index: 220;
 }
 
 .select-trigger {
@@ -1463,7 +1448,7 @@ button:disabled {
 
 .select-popover {
   position: absolute;
-  z-index: 2650;
+  z-index: 90;
   top: calc(100% + 0.38rem);
   right: 0;
   left: 0;
@@ -1584,21 +1569,12 @@ button:disabled {
 
 .upload-zone {
   position: relative;
-  z-index: 0;
   overflow: hidden;
   border: 1.5px dashed rgba(27, 110, 168, 0.32);
   border-radius: clamp(1rem, 2vw, 1.25rem);
   background:
     linear-gradient(135deg, rgba(27, 110, 168, 0.1), rgba(47, 111, 79, 0.08)),
     rgba(255, 255, 255, 0.92);
-}
-
-/* When any select inside the upload form is open, lower and disable the upload zone
-   so popovers and dropdowns can appear and receive pointer events. Uses :has(),
-   supported in modern browsers. */
-.padan-upload:has(.select-control.is-open) .upload-zone {
-  z-index: -1 !important;
-  pointer-events: none !important;
 }
 
 .upload-zone.is-disabled {
@@ -3116,21 +3092,16 @@ button:disabled {
   display: grid;
   padding: clamp(1rem, 3vw, 2.25rem);
   place-items: center;
-  overflow: auto;
-  overscroll-behavior: contain;
   background: rgba(7, 19, 15, 0.42);
   backdrop-filter: blur(14px);
   animation: modal-backdrop-in 180ms var(--ease-standard) both;
 }
 
 .stat-modal {
+  display: grid;
   width: min(100%, 58rem);
   max-height: min(86vh, 760px);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  touch-action: pan-y;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.86);
   border-radius: clamp(1.1rem, 2.4vw, 1.5rem);
   background:
@@ -3275,7 +3246,9 @@ button:disabled {
 }
 
 .stat-modal-body {
-  overflow: visible;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 0 clamp(1rem, 2.4vw, 1.35rem) clamp(1rem, 2.4vw, 1.35rem);
 }
 
@@ -3943,12 +3916,7 @@ button:disabled {
 .kat-popup-card {
   display: grid;
   gap: 0.58rem;
-  max-height: min(68vh, 30rem);
-  overflow-y: auto;
-  overscroll-behavior: contain;
   padding: 0.82rem;
-  scrollbar-gutter: stable;
-  touch-action: pan-y;
 }
 
 .kat-popup-kicker {
