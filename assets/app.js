@@ -2819,6 +2819,7 @@
                 h('strong', null, `Mode ${mapLevelMeta.label}`),
                 h('small', null, mapNotice || 'Klik wilayah di peta untuk memilih level berikutnya.')
               ),
+              h('br'),
               h('span', { className: cx('map-layer-chip', mapFeatureCount ? 'is-ready' : 'is-empty', mapLoading && 'is-loading') },
                 h(Icon, { name: mapLoading ? 'LoaderCircle' : mapFeatureCount ? 'MousePointerClick' : 'Layers3', size: 13 }),
                 mapLoading ? 'Memuat layer' : mapFeatureCount ? `${compactNumber(mapFeatureCount)} shape klik` : 'Layer kosong'
