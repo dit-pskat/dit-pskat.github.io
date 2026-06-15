@@ -3127,6 +3127,7 @@
           onSearch: text => load(level, scopedParams(level), text),
           onChange: event => { if (!event.target.value) changeLevel(level, ''); },
           onSelectOption: selected => changeLevel(level, selected?.name || '', selected),
+          onOpenChange: isOpen => setOpenSelect(isOpen ? level : ''),
         },
           h('option', { value: '' }, loading[level] ? 'Memuat...' : placeholder),
           selectOptions(level)
@@ -3336,7 +3337,7 @@
 
     return h('main', { className: 'padan-layout' },
       h('section', { className: 'grid gap-5' },
-        h('form', { className: 'panel panel-solid padan-upload', onSubmit: uploadDraft },
+        h('form', { className: cx( 'panel panel-solid padan-upload', openSelect && 'has-open-select' ), onSubmit: uploadDraft },
           h('div', { className: 'section-head' },
             h('div', null,
               h('p', { className: 'section-kicker' }, needsRegion ? 'Pilih wilayah lalu unggah' : 'Unggah file NIK'),
