@@ -1597,24 +1597,34 @@ button:disabled {
 /* When any select inside the upload form is open, lower and disable the upload zone
    so popovers and dropdowns can appear and receive pointer events. Uses :has(),
    supported in modern browsers. */
+.padan-upload {
+  position: relative;
+  isolation: isolate;
+}
+
+.padan-upload.has-open-select .upload-zone {
+  pointer-events: none !important;
+  opacity: 0.35;
+  z-index: 0;
+}
+
+.padan-upload.has-open-select .upload-zone-button {
+  pointer-events: none !important;
+}
+
 .region-fieldset {
   position: relative;
-  z-index: 100;
+  z-index: 50;
 }
 
 .select-control {
   position: relative;
-  z-index: 101;
+  z-index: 60;
 }
 
-.select-dropdown {
+.select-popover {
   position: absolute;
   z-index: 9999;
-}
-
-.upload-zone {
-  position: relative;
-  z-index: 1;
 }
 
 .upload-zone.is-disabled {

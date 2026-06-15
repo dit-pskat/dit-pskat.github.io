@@ -1008,6 +1008,7 @@
     searchable = false,
     onSearch,
     onSelectOption,
+    onOpenChange,
     searchPlaceholder = 'Cari pilihan...',
     allowCustom = false,
     customOptionLabel = text => `Gunakan "${text}"`,
@@ -1052,6 +1053,11 @@
     useEffect(() => {
       if (disabled) setOpen(false);
     }, [disabled]);
+
+    useEffect(() => {
+      onOpenChange?.(open);
+      return () => onOpenChange?.(false);
+    }, [open, onOpenChange]);
 
     useEffect(() => {
       onSearchRef.current = onSearch;
@@ -3151,6 +3157,7 @@
   }
 
   function PadanDataPage({ appConfig, initialRegion, initialShortCode = '' }) {
+    const [openSelect, setOpenSelect] = useState('');
     const [email, setEmail] = useState('');
     const [file, setFile] = useState(null);
     const [draft, setDraft] = useState(null);
