@@ -1584,7 +1584,7 @@ button:disabled {
 
 .upload-zone {
   position: relative;
-  z-index: 1;
+  z-index: 0;
   overflow: hidden;
   border: 1.5px dashed rgba(27, 110, 168, 0.32);
   border-radius: clamp(1rem, 2vw, 1.25rem);
