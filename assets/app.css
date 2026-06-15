@@ -1605,7 +1605,7 @@ button:disabled {
 .padan-upload.has-open-select .upload-zone {
   pointer-events: none !important;
   opacity: 0.35;
-  z-index: 0 !important;
+  z-index: 0;
 }
 
 .padan-upload.has-open-select .upload-zone-button {
