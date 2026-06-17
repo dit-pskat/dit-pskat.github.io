@@ -1577,7 +1577,7 @@
         hasBnba ? h(MiniMetric, { icon: 'FileSpreadsheet', label: 'KK input BNBA', value: fullNumber(bnba.input_rows || 0) }) : null,
         hasBnba ? h(MiniMetric, { icon: 'CopyCheck', label: 'KK unik/duplikat', value: `${fullNumber(bnba.kk_unique || 0)} / ${fullNumber(bnba.kk_duplicate || 0)}` }) : null
       ),
-      h('div', { className: 'mt-3 flex flex-wrap gap-2' },
+      h('div', { className: 'mt-3 flex flex-wrap gap-2 bg-transparent' },
         item.community_name ? h(Badge, { status: 'slate' }, item.community_name) : null,
         item.status ? h(Badge, { status: item.status }, item.status) : null,
         hasBnba ? h(Badge, { status: 'checked' }, 'ada data BNBA') : null,
@@ -2915,12 +2915,12 @@
                 ),
                 item.address ? h('p', { className: 'mt-2 break-words text-xs leading-5 text-slate-600' }, item.address) : null,
                 h('div', { className: 'mt-2 flex flex-wrap items-center gap-2 text-xs font-black text-slate-600' },
-                  households.distribution ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: householdSummaryText(item) }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} KK by Excel`) : null,
+                  households.distribution ? h('span', { className: 'inline-flex items-center gap-1 rounded-full px-2 py-1', title: householdSummaryText(item) }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} KK by Excel`) : null,
                   households.bnba ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-200', title: householdSummaryText(item) }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(households.bnba)} KK by padan`) : null,
-                  !households.distribution && !households.bnba && households.effective ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK final`) : null,
+                  !households.distribution && !households.bnba && households.effective ? h('span', { className: 'inline-flex items-center gap-1 rounded-full px-2 py-1', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK final`) : null,
                   households.delta ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-200' }, h(Icon, { name: 'Activity', size: 13 }), `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)}`) : null,
-                  item.source_data ? h('span', { className: 'max-w-full break-words rounded-full bg-white px-2 py-1 ring-1 ring-slate-200', title: item.source_data }, item.source_data) : null,
-                  item.data_year ? h('span', { className: 'rounded-full bg-white px-2 py-1 ring-1 ring-slate-200' }, item.data_year) : null
+                  item.source_data ? h('span', { className: 'max-w-full break-words rounded-full px-2 py-1', title: item.source_data }, item.source_data) : null,
+                  item.data_year ? h('span', { className: 'rounded-full px-2 py-1' }, item.data_year) : null
                 )
               ),
               h('button', { type: 'button', className: 'location-card-padan', onClick: () => onStartPadan?.(item) },
