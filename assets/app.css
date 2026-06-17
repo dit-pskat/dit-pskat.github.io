@@ -1801,8 +1801,22 @@ button:disabled {
   width: 100%;
   border: 0;
   padding: 0;
-  background: transparent;
   color: inherit;
+  background: transparent;
+  background-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Remove any lingering white backgrounds inside location cards (but keep the padan button intact) */
+.location-card :where(p, span, div, strong, small, a, b) {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.location-card :where(.location-card-padan, .location-card-padan *) {
+  background: unset !important;
 }
 
 .location-card-main::before {
@@ -1924,6 +1938,33 @@ button:disabled {
 .source-pill-button > span,
 .source-pills > span > span {
   min-width: 0;
+}
+
+/* Ensure the sidebar header with the active source and its badge is responsive */
+.map-side-panel .flex.flex-wrap.items-center.justify-between {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.map-side-panel .flex.flex-wrap.items-center.justify-between > span:first-child {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.map-side-panel .flex.flex-wrap.items-center.justify-between > span.inline-flex {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.map-side-panel .inline-flex .truncate {
+  display: inline-block;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .region-detail {
@@ -3642,6 +3683,48 @@ button:disabled {
   .link-card-title {
     min-height: 2.65rem;
     white-space: normal;
+  }
+}
+
+/* Responsive tweak: ensure map drill/legend wraps cleanly on smaller screens */
+@media (max-width: 1023px) {
+  .map-drill-head {
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 0.45rem;
+    align-items: center;
+  }
+
+  .map-drill-head .map-layer-chip,
+  .map-drill-head .shrink-0 {
+    /* place chip and data-badge on their own row so they don't overflow */
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin-top: 0.15rem;
+  }
+
+  .map-drill-actions {
+    /* keep actions aligned to the right on the first row */
+    grid-column: 3 / -1;
+    justify-self: end;
+  }
+}
+
+@media (max-width: 640px) {
+  .map-drill-head {
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    gap: 0.4rem;
+  }
+
+  .map-drill-actions {
+    grid-column: 2 / -1;
+    justify-self: end;
+  }
+
+  .map-drill-head .map-layer-chip,
+  .map-drill-head .shrink-0 {
+    grid-column: 1 / -1;
   }
 }
 
