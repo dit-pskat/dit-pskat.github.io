@@ -2810,83 +2810,38 @@
       h(LinkArchiveHome, { onOpenArchive }),
       activeStatDetail ? h(StatDetailModal, { stat: activeStatDetail, rows: statDetailRows, onClose: () => setStatDetailKey('') }) : null,
       h('section', { className: 'map-layout grid min-h-[640px] gap-4' },
-  h('div', { className: 'map-shell overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm' },
-
-    // ROW 1: PETA
-    h('div', { className: 'map-shell-map h-[520px] w-full' },
-      h('div', { ref: mapBoxRef, className: 'h-full w-full' })
-    ),
-
-    // ROW 2: PANEL MODE + DATA PETA
-    h('div', { className: cx('map-drill-panel', mapPanelCollapsed && 'is-collapsed', mapLoading && 'is-loading') },
-      h('div', { className: 'map-drill-head flex flex-col gap-2' },
-
-        h('div', { className: 'flex flex-wrap items-center gap-2' },
-          h('span', { className: 'map-drill-icon' }, h(Icon, { name: mapLevelMeta.icon, size: 16 })),
-          h('span', { className: 'map-drill-copy' },
-            h('strong', null, `Mode ${mapLevelMeta.label}`),
-            h('small', null, mapNotice || 'Klik wilayah di peta untuk memilih level berikutnya.')
-          ),
-          h('span', { className: cx('map-layer-chip', mapFeatureCount ? 'is-ready' : 'is-empty', mapLoading && 'is-loading') },
-            h(Icon, { name: mapLoading ? 'LoaderCircle' : mapFeatureCount ? 'MousePointerClick' : 'Layers3', size: 13 }),
-            mapLoading ? 'Memuat layer' : mapFeatureCount ? `${compactNumber(mapFeatureCount)} shape klik` : 'Layer kosong'
-          ),
-          h(DataStoreSourceBadge, {
-            mode: dataStoreMode,
-            label: dataStoreLabel,
-            prefix: 'Data peta',
-            warning: dataStoreWarning,
-            className: 'shrink-0'
-          }),
-          h('span', { className: 'map-drill-actions' },
-            h('button', {
-              type: 'button',
-              onClick: () => setMapPanelCollapsed(current => !current),
-              title: mapPanelCollapsed ? 'Buka panel mode' : 'Minimize panel mode'
-            }, h(Icon, { name: mapPanelCollapsed ? 'Maximize2' : 'Minimize2', size: 15 })),
-
-            selectedTrail.length || mapLevel !== 'province'
-              ? h('button', { type: 'button', onClick: stepMapBack, title: 'Kembali satu level' },
-                  h(Icon, { name: 'ChevronLeft', size: 15 }))
-              : null,
-
-            selectedTrail.length || mapLevel !== 'province'
-              ? h('button', { type: 'button', onClick: resetMapDrill, title: 'Reset peta' },
-                  h(Icon, { name: 'RotateCcw', size: 15 }))
-              : null
+        h('div', { className: 'map-shell min-h-[520px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm' },
+          h('div', { ref: mapBoxRef, className: 'h-[520px] w-full lg:h-full' }),
+          h('div', { className: cx('map-drill-panel', mapPanelCollapsed && 'is-collapsed', mapLoading && 'is-loading') },
+            h('div', { className: 'map-drill-head' },
+              h('span', { className: 'map-drill-icon' }, h(Icon, { name: mapLevelMeta.icon, size: 16 })),
+              h('span', { className: 'map-drill-copy' },
+                h('strong', null, `Mode ${mapLevelMeta.label}`),
+                h('small', null, mapNotice || 'Klik wilayah di peta untuk memilih level berikutnya.')
+              ),
+              h('span', { className: cx('map-layer-chip', mapFeatureCount ? 'is-ready' : 'is-empty', mapLoading && 'is-loading') },
+                h(Icon, { name: mapLoading ? 'LoaderCircle' : mapFeatureCount ? 'MousePointerClick' : 'Layers3', size: 13 }),
+                mapLoading ? 'Memuat layer' : mapFeatureCount ? `${compactNumber(mapFeatureCount)} shape klik` : 'Layer kosong'
+              ),
+              h(DataStoreSourceBadge, { mode: dataStoreMode, label: dataStoreLabel, prefix: 'Data peta', warning: dataStoreWarning, className: 'shrink-0' }),
+              h('span', { className: 'map-drill-actions' },
+                h('button', { type: 'button', onClick: () => setMapPanelCollapsed(current => !current), title: mapPanelCollapsed ? 'Buka panel mode' : 'Minimize panel mode' }, h(Icon, { name: mapPanelCollapsed ? 'Maximize2' : 'Minimize2', size: 15 })),
+                selectedTrail.length || mapLevel !== 'province' ? h('button', { type: 'button', onClick: stepMapBack, title: 'Kembali satu level' }, h(Icon, { name: 'ChevronLeft', size: 15 })) : null,
+                selectedTrail.length || mapLevel !== 'province' ? h('button', { type: 'button', onClick: resetMapDrill, title: 'Reset peta' }, h(Icon, { name: 'RotateCcw', size: 15 })) : null
+              )
+            ),
+            !mapPanelCollapsed && selectedTrail.length ? h('div', { className: 'map-drill-trail' },
+              selectedTrail.map(item => h('span', { key: item.key }, `${item.label}: ${item.value}`))
+            ) : null,
+            !mapPanelCollapsed && (drillLoading || drillOptions.length || (mapLevel !== 'province' && selectedTrail.length)) ? h('div', { className: 'map-drill-options' },
+              drillLoading ? h('span', { className: 'map-drill-loading' }, 'Memuat pilihan...') :
+                drillOptions.length ? drillOptions.slice(0, 12).map(option => h('button', { key: `${mapLevel}-${option.name}-${option.subtitle || ''}`, type: 'button', onClick: () => chooseDrillOption(option), title: option.subtitle || option.name },
+                  h('span', null, option.name),
+                  option.count ? h('small', null, compactNumber(option.count)) : null
+                )) : h('span', { className: 'map-drill-empty' }, `Belum ada daftar ${mapLevelMeta.label} untuk scope ini. Admin bisa upload GeoJSON atau data persebaran tambahan.`)
+            ) : null
           )
         ),
-
-        !mapPanelCollapsed && selectedTrail.length
-          ? h('div', { className: 'map-drill-trail' },
-              selectedTrail.map(item => h('span', { key: item.key }, `${item.label}: ${item.value}`))
-            )
-          : null,
-
-        !mapPanelCollapsed && (drillLoading || drillOptions.length || (mapLevel !== 'province' && selectedTrail.length))
-          ? h('div', { className: 'map-drill-options' },
-              drillLoading
-                ? h('span', { className: 'map-drill-loading' }, 'Memuat pilihan...')
-                : drillOptions.length
-                  ? drillOptions.slice(0, 12).map(option =>
-                      h('button', {
-                        key: `${mapLevel}-${option.name}-${option.subtitle || ''}`,
-                        type: 'button',
-                        onClick: () => chooseDrillOption(option),
-                        title: option.subtitle || option.name
-                      },
-                        h('span', null, option.name),
-                        option.count ? h('small', null, compactNumber(option.count)) : null
-                      )
-                    )
-                  : h('span', { className: 'map-drill-empty' },
-                      `Belum ada daftar ${mapLevelMeta.label} untuk scope ini. Admin bisa upload GeoJSON atau data persebaran tambahan.`)
-            )
-          : null
-      )
-    )
-  )
-)
         h('aside', { className: 'map-side-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur-xl' },
           h('div', { className: 'grid gap-3' },
             h('div', { className: 'flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100' },
