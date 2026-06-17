@@ -2819,11 +2819,6 @@
                 h('strong', null, `Mode ${mapLevelMeta.label}`),
                 h('small', null, mapNotice || 'Klik wilayah di peta untuk memilih level berikutnya.')
               ),
-              h('span', { className: cx('map-layer-chip', mapFeatureCount ? 'is-ready' : 'is-empty', mapLoading && 'is-loading') },
-                h(Icon, { name: mapLoading ? 'LoaderCircle' : mapFeatureCount ? 'MousePointerClick' : 'Layers3', size: 13 }),
-                mapLoading ? 'Memuat layer' : mapFeatureCount ? `${compactNumber(mapFeatureCount)} shape klik` : 'Layer kosong'
-              ),
-              h(DataStoreSourceBadge, { mode: dataStoreMode, label: dataStoreLabel, prefix: 'Data peta', warning: dataStoreWarning, className: 'shrink-0' }),
               h('span', { className: 'map-drill-actions' },
                 h('button', { type: 'button', onClick: () => setMapPanelCollapsed(current => !current), title: mapPanelCollapsed ? 'Buka panel mode' : 'Minimize panel mode' }, h(Icon, { name: mapPanelCollapsed ? 'Maximize2' : 'Minimize2', size: 15 })),
                 selectedTrail.length || mapLevel !== 'province' ? h('button', { type: 'button', onClick: stepMapBack, title: 'Kembali satu level' }, h(Icon, { name: 'ChevronLeft', size: 15 })) : null,
