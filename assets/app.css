@@ -5629,7 +5629,7 @@ body::before {
 .hero-cta-ghost,
 .dock-tab,
 .dock-tab-icon,
-.content-stack button:not(.dock-tab):not(.hero-cta):not(.upload-zone-button):not(.select-trigger):not(.select-option):not(.stat-card):not(.location-card),
+.content-stack button:not(.dock-tab):not(.hero-cta):not(.upload-zone-button):not(.select-trigger):not(.select-option):not(.stat-card):not(.location-card):not(.btn-open-draft-action):not(.btn-delete-draft-action):not(.btn-gemini-extract-action),
 .location-card-padan,
 .link-card-open,
 .result-download-link,
@@ -6025,7 +6025,868 @@ body .site-canvas .content-stack button.kat-popup-primary:not(.dock-tab):not(.he
     margin-inline: auto !important;
     background: transparent !important;
     box-shadow: none !important;
-    gap: 0.24rem !important;
     transform: none !important;
+  }
+}
+
+/* ==========================================================================
+   PDF IMPORT & DRAFT ULTIMATE STYLES (EXPLICIT HIGH-CONTRAST VISIBILITY)
+   ========================================================================== */
+.pdf-import-container {
+  margin-top: 1.5rem !important;
+  padding: 1.5rem !important;
+  border-radius: 1.5rem !important;
+  border: 1.5px solid #c7d2fe !important;
+  background: #f5f3ff !important;
+  background: linear-gradient(180deg, #ede9fe 0%, #f5f3ff 45%, #ffffff 100%) !important;
+  box-shadow: 0 10px 30px -5px rgba(99, 102, 241, 0.12) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1.25rem !important;
+}
+
+.pdf-import-header-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.85rem !important;
+}
+
+.pdf-import-badge-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.75rem !important;
+  height: 2.75rem !important;
+  border-radius: 0.9rem !important;
+  background: #6d28d9 !important;
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%) !important;
+  color: #ffffff !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.4) !important;
+}
+
+.pdf-import-badge-icon svg {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  stroke: #ffffff !important;
+  color: #ffffff !important;
+}
+
+.pdf-import-header-texts {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.15rem !important;
+}
+
+.pdf-import-main-title {
+  font-size: 1.05rem !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  margin: 0 !important;
+  line-height: 1.2 !important;
+}
+
+.pdf-import-sub-badge {
+  font-size: 0.68rem !important;
+  font-weight: 900 !important;
+  color: #6d28d9 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+}
+
+.pdf-import-description {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  line-height: 1.5 !important;
+  margin: 0 !important;
+}
+
+/* LOCAL DRAFT CARD */
+.pdf-local-draft-card {
+  padding: 1.15rem !important;
+  border-radius: 1.15rem !important;
+  border: 2px solid #f59e0b !important;
+  background: #fffbeb !important;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.85rem !important;
+  box-shadow: 0 6px 16px rgba(217, 119, 6, 0.15) !important;
+}
+
+.pdf-draft-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+}
+
+.pdf-draft-icon-box {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  border-radius: 0.75rem !important;
+  background-color: #fef3c7 !important;
+  border: 1px solid #fcd34d !important;
+  color: #92400e !important;
+  flex-shrink: 0 !important;
+}
+
+.pdf-draft-icon-box svg {
+  stroke: #92400e !important;
+  color: #92400e !important;
+}
+
+.pdf-draft-text-group {
+  min-width: 0 !important;
+  flex: 1 1 0 !important;
+}
+
+.pdf-draft-title-line {
+  display: block !important;
+  font-size: 0.85rem !important;
+  font-weight: 900 !important;
+  color: #78350f !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.pdf-draft-meta-line {
+  display: block !important;
+  font-size: 0.73rem !important;
+  font-weight: 700 !important;
+  color: #b45309 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.pdf-draft-action-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+}
+
+/* HIGH SPECIFICITY OVERRIDES FOR DRAFT & GEMINI BUTTONS */
+body .site-canvas .content-stack button.btn-gemini-extract-action::before,
+body .site-canvas .content-stack button.btn-gemini-extract-action::after,
+body .site-canvas .content-stack button.btn-open-draft-action::before,
+body .site-canvas .content-stack button.btn-open-draft-action::after,
+body .site-canvas .content-stack button.btn-delete-draft-action::before,
+body .site-canvas .content-stack button.btn-delete-draft-action::after {
+  display: none !important;
+  content: none !important;
+}
+
+body .site-canvas .content-stack button.btn-open-draft-action,
+body .site-canvas button.btn-open-draft-action,
+button.btn-open-draft-action,
+.btn-open-draft-action {
+  flex: 1 1 0 !important;
+  height: 2.75rem !important;
+  border-radius: 0.85rem !important;
+  background: #d97706 !important;
+  background-color: #d97706 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  font-size: 0.82rem !important;
+  font-weight: 900 !important;
+  border: 1.5px solid #b45309 !important;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.4) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+}
+
+body .site-canvas .content-stack button.btn-open-draft-action *,
+body .site-canvas button.btn-open-draft-action *,
+button.btn-open-draft-action * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+}
+
+body .site-canvas .content-stack button.btn-open-draft-action:hover,
+body .site-canvas button.btn-open-draft-action:hover,
+button.btn-open-draft-action:hover {
+  background: #b45309 !important;
+  background-color: #b45309 !important;
+  color: #ffffff !important;
+}
+
+body .site-canvas .content-stack button.btn-delete-draft-action,
+body .site-canvas button.btn-delete-draft-action,
+button.btn-delete-draft-action,
+.btn-delete-draft-action {
+  height: 2.75rem !important;
+  padding: 0 1.15rem !important;
+  border-radius: 0.85rem !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #78350f !important;
+  font-size: 0.82rem !important;
+  font-weight: 900 !important;
+  border: 1.5px solid #fcd34d !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+}
+
+body .site-canvas .content-stack button.btn-delete-draft-action *,
+body .site-canvas button.btn-delete-draft-action *,
+button.btn-delete-draft-action * {
+  color: #78350f !important;
+}
+
+body .site-canvas .content-stack button.btn-delete-draft-action:hover,
+body .site-canvas button.btn-delete-draft-action:hover,
+button.btn-delete-draft-action:hover {
+  background: #fef3c7 !important;
+  background-color: #fef3c7 !important;
+}
+
+body .site-canvas .content-stack button.btn-gemini-extract-action,
+body .site-canvas button.btn-gemini-extract-action,
+button.btn-gemini-extract-action,
+.btn-gemini-extract-action {
+  width: 100% !important;
+  height: 3rem !important;
+  padding: 0 1.25rem !important;
+  border-radius: 0.9rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 900 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  transition: all 0.15s ease !important;
+}
+
+body .site-canvas .content-stack button.btn-gemini-extract-action:not(:disabled),
+body .site-canvas button.btn-gemini-extract-action:not(:disabled),
+button.btn-gemini-extract-action:not(:disabled),
+.btn-gemini-extract-action:not(:disabled) {
+  background: #6d28d9 !important;
+  background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%) !important;
+  background-color: #6d28d9 !important;
+  color: #ffffff !important;
+  border: 1.5px solid #5b21b6 !important;
+  box-shadow: 0 6px 20px rgba(109, 40, 217, 0.45) !important;
+  cursor: pointer !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+body .site-canvas .content-stack button.btn-gemini-extract-action:not(:disabled) *,
+body .site-canvas button.btn-gemini-extract-action:not(:disabled) *,
+button.btn-gemini-extract-action:not(:disabled) *,
+.btn-gemini-extract-action:not(:disabled) * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+body .site-canvas .content-stack button.btn-gemini-extract-action:not(:disabled):hover,
+body .site-canvas button.btn-gemini-extract-action:not(:disabled):hover,
+button.btn-gemini-extract-action:not(:disabled):hover {
+  background: linear-gradient(135deg, #5b21b6 0%, #4338ca 100%) !important;
+  color: #ffffff !important;
+}
+
+body .site-canvas .content-stack button.btn-gemini-extract-action:disabled,
+body .site-canvas button.btn-gemini-extract-action:disabled,
+button.btn-gemini-extract-action:disabled,
+.btn-gemini-extract-action:disabled {
+  background: #f1f5f9 !important;
+  background-color: #f1f5f9 !important;
+  background-image: none !important;
+  color: #0f172a !important;
+  border: 2px solid #94a3b8 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+body .site-canvas .content-stack button.btn-gemini-extract-action:disabled *,
+body .site-canvas button.btn-gemini-extract-action:disabled *,
+button.btn-gemini-extract-action:disabled *,
+.btn-gemini-extract-action:disabled * {
+  color: #0f172a !important;
+  stroke: #0f172a !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* PDF Confirmation Modal Footer & Control Buttons (Ultimate Specificity Overrides) */
+html body .site-canvas button.pdf-btn-save-draft,
+html body div button.pdf-btn-save-draft,
+body .site-canvas button.pdf-btn-save-draft,
+button.pdf-btn-save-draft,
+.pdf-btn-save-draft {
+  height: 2.85rem !important;
+  padding: 0 1.5rem !important;
+  border-radius: 0.85rem !important;
+  background: #d97706 !important;
+  background-color: #d97706 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  font-size: 0.85rem !important;
+  font-weight: 900 !important;
+  border: 1.5px solid #b45309 !important;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.4) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html body .site-canvas button.pdf-btn-save-draft *,
+html body div button.pdf-btn-save-draft *,
+body .site-canvas button.pdf-btn-save-draft *,
+button.pdf-btn-save-draft *,
+.pdf-btn-save-draft * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  font-weight: 900 !important;
+}
+
+html body .site-canvas button.pdf-btn-submit-data,
+html body div button.pdf-btn-submit-data,
+body .site-canvas button.pdf-btn-submit-data,
+button.pdf-btn-submit-data,
+.pdf-btn-submit-data {
+  height: 2.85rem !important;
+  padding: 0 1.75rem !important;
+  border-radius: 0.85rem !important;
+  background: #6d28d9 !important;
+  background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%) !important;
+  background-color: #6d28d9 !important;
+  color: #ffffff !important;
+  font-size: 0.85rem !important;
+  font-weight: 900 !important;
+  border: 1.5px solid #5b21b6 !important;
+  box-shadow: 0 6px 20px rgba(109, 40, 217, 0.45) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html body .site-canvas button.pdf-btn-submit-data *,
+html body div button.pdf-btn-submit-data *,
+body .site-canvas button.pdf-btn-submit-data *,
+button.pdf-btn-submit-data *,
+.pdf-btn-submit-data * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  font-weight: 900 !important;
+}
+
+html body .site-canvas button.pdf-btn-apply-batch,
+html body div button.pdf-btn-apply-batch,
+body .site-canvas button.pdf-btn-apply-batch,
+button.pdf-btn-apply-batch,
+.pdf-btn-apply-batch {
+  height: 2.75rem !important;
+  padding: 0 1.35rem !important;
+  border-radius: 0.75rem !important;
+  background: #6d28d9 !important;
+  background-color: #6d28d9 !important;
+  background-image: linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%) !important;
+  color: #ffffff !important;
+  font-size: 0.82rem !important;
+  font-weight: 900 !important;
+  border: 1.5px solid #5b21b6 !important;
+  box-shadow: 0 4px 14px rgba(109, 40, 217, 0.4) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html body .site-canvas button.pdf-btn-apply-batch *,
+html body div button.pdf-btn-apply-batch *,
+body .site-canvas button.pdf-btn-apply-batch *,
+button.pdf-btn-apply-batch *,
+.pdf-btn-apply-batch * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  font-weight: 900 !important;
+}
+
+/* ==========================================================================
+   PERMANENT HIGH-SPECIFICITY FIX FOR ADMIN TABS, BUTTONS & SELECTINPUT
+   ========================================================================== */
+
+/* 1. Admin Selected Tab & Primary Slate Button (bg-slate-950) */
+html body .site-canvas button.bg-slate-950,
+html body div button.bg-slate-950,
+body .site-canvas button.bg-slate-950,
+button.bg-slate-950,
+.bg-slate-950 {
+  background-color: #0f172a !important;
+  background: #0f172a !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border: 1px solid #1e293b !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html body .site-canvas button.bg-slate-950 *,
+html body div button.bg-slate-950 *,
+body .site-canvas button.bg-slate-950 *,
+button.bg-slate-950 *,
+.bg-slate-950 * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+}
+
+/* 2. Blue Action Button (bg-blue-600) */
+html body .site-canvas button.bg-blue-600,
+html body div button.bg-blue-600,
+body .site-canvas button.bg-blue-600,
+button.bg-blue-600,
+.bg-blue-600 {
+  background-color: #2563eb !important;
+  background: #2563eb !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border: 1px solid #1d4ed8 !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html body .site-canvas button.bg-blue-600 *,
+html body div button.bg-blue-600 *,
+body .site-canvas button.bg-blue-600 *,
+button.bg-blue-600 *,
+.bg-blue-600 * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+}
+
+/* 3. Emerald Success Button (bg-emerald-600) */
+html body .site-canvas button.bg-emerald-600,
+html body div button.bg-emerald-600,
+body .site-canvas button.bg-emerald-600,
+button.bg-emerald-600,
+.bg-emerald-600 {
+  background-color: #059669 !important;
+  background: #059669 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border: 1px solid #047857 !important;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html body .site-canvas button.bg-emerald-600 *,
+html body div button.bg-emerald-600 *,
+body .site-canvas button.bg-emerald-600 *,
+button.bg-emerald-600 *,
+.bg-emerald-600 * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+}
+
+/* 4. Danger Rose/Red Button (bg-rose-600 / bg-red-600) */
+html body .site-canvas button.bg-rose-600,
+html body div button.bg-rose-600,
+html body .site-canvas button.bg-red-600,
+html body div button.bg-red-600,
+button.bg-rose-600,
+button.bg-red-600,
+.bg-rose-600,
+.bg-red-600 {
+  background-color: #e11d48 !important;
+  background: #e11d48 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border: 1px solid #be123c !important;
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.3) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html body .site-canvas button.bg-rose-600 *,
+html body div button.bg-rose-600 *,
+html body .site-canvas button.bg-red-600 *,
+html body div button.bg-red-600 *,
+button.bg-rose-600 *,
+button.bg-red-600 *,
+.bg-rose-600 *,
+.bg-red-600 * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  fill: none !important;
+}
+
+/* 5. Soft White Button (bg-white text-slate-800) */
+html body .site-canvas button.bg-white,
+html body div button.bg-white,
+body .site-canvas button.bg-white,
+button.bg-white {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  background-image: none !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+html body .site-canvas button.bg-white *,
+html body div button.bg-white *,
+body .site-canvas button.bg-white *,
+button.bg-white * {
+  color: #1e293b !important;
+  stroke: #475569 !important;
+}
+
+/* 6. SelectInput Dropdown Option States (.select-option) */
+html body .select-popover .select-option {
+  background: transparent !important;
+  color: #1e293b !important;
+}
+
+html body .select-popover .select-option * {
+  color: inherit !important;
+}
+
+html body .select-popover .select-option:hover,
+html body .select-popover .select-option:focus-visible {
+  background-color: #f3e8ff !important;
+  background: #f3e8ff !important;
+  color: #6d28d9 !important;
+}
+
+html body .select-popover .select-option.is-selected,
+html body .select-popover .select-option[aria-selected="true"] {
+  background-color: #6d28d9 !important;
+  background: #6d28d9 !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+html body .select-popover .select-option.is-selected *,
+html body .select-popover .select-option[aria-selected="true"] * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Admin controls use a dedicated contract so broad content-button effects cannot
+   override a button variant or collapse its padding. */
+#root .site-canvas-admin button[data-ui-button] {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex !important;
+  min-width: max-content;
+  min-height: 2.75rem;
+  height: 2.75rem;
+  padding: 0 1rem !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid transparent !important;
+  border-radius: 0.75rem;
+  color: #ffffff !important;
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  opacity: 1;
+  visibility: visible;
+}
+
+#root .site-canvas-admin button[data-ui-button] > * {
+  position: relative;
+  z-index: 1;
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+
+#root .site-canvas-admin button[data-ui-button]::before,
+#root .site-canvas-admin button[data-ui-button]::after {
+  display: none !important;
+  content: none !important;
+}
+
+#root .site-canvas-admin button[data-button-variant="primary"] {
+  background: #0f766e !important;
+  border-color: #0f766e !important;
+  color: #ffffff !important;
+}
+
+#root .site-canvas-admin button[data-button-variant="blue"] {
+  background: #2563eb !important;
+  border-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+#root .site-canvas-admin button[data-button-variant="success"] {
+  background: #047857 !important;
+  border-color: #047857 !important;
+  color: #ffffff !important;
+}
+
+#root .site-canvas-admin button[data-button-variant="danger"] {
+  background: #be123c !important;
+  border-color: #be123c !important;
+  color: #ffffff !important;
+}
+
+#root .site-canvas-admin button[data-button-variant="purple"] {
+  background: #6d28d9 !important;
+  border-color: #5b21b6 !important;
+  color: #ffffff !important;
+}
+
+#root .site-canvas-admin button[data-button-variant="amber"] {
+  background: #b45309 !important;
+  border-color: #92400e !important;
+  color: #ffffff !important;
+}
+
+#root .site-canvas-admin button[data-button-variant="soft"] {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+#root .site-canvas-admin button[data-button-variant="ghost"] {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: #334155 !important;
+  box-shadow: none;
+}
+
+#root .site-canvas-admin button[data-ui-button].ui-button--compact {
+  min-height: 2.25rem;
+  height: 2.25rem;
+  padding-inline: 0.75rem !important;
+  font-size: 0.72rem;
+}
+
+#root .site-canvas-admin button[data-ui-button]:disabled {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+  color: #64748b !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+
+#root .site-canvas-admin button[data-ui-button]:not(:disabled):hover {
+  filter: brightness(0.94);
+  transform: translateY(-1px);
+}
+
+#root .site-canvas-admin button[data-ui-button]:focus-visible,
+#root .site-canvas-admin .admin-export-button:focus-visible,
+#root .site-canvas-admin button.pdf-btn-cancel:focus-visible,
+#root .site-canvas-admin button.pdf-btn-save-draft:focus-visible,
+#root .site-canvas-admin button.pdf-btn-submit-data:focus-visible,
+#root .site-canvas-admin button.pdf-btn-apply-batch:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.28);
+  outline-offset: 2px;
+}
+
+.site-canvas-admin .admin-auth-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.site-canvas-admin .admin-auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.site-canvas-admin .admin-export-button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  height: 2.75rem;
+  padding: 0 1rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+#root .site-canvas-admin .admin-tabs button[data-ui-button] {
+  flex: 1 0 max-content;
+  min-width: max-content;
+  min-height: 2.4rem !important;
+  height: 2.4rem !important;
+  padding-inline: 0.5rem !important;
+  font-size: 0.7rem;
+}
+
+#root .site-canvas-admin .admin-tabs button[data-ui-button] svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.site-canvas-admin .admin-tabs {
+  gap: 0.3rem !important;
+}
+
+/* The PDF confirmation modal has custom buttons outside Button(), so protect
+   those controls from the same broad selectors as well. */
+#root .site-canvas-admin button.pdf-btn-cancel,
+#root .site-canvas-admin button.pdf-btn-save-draft,
+#root .site-canvas-admin button.pdf-btn-submit-data,
+#root .site-canvas-admin button.pdf-btn-apply-batch {
+  position: relative;
+  display: inline-flex !important;
+  min-width: max-content;
+  min-height: 2.75rem;
+  padding-inline: 1.25rem !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#root .site-canvas-admin button.pdf-btn-cancel::before,
+#root .site-canvas-admin button.pdf-btn-cancel::after,
+#root .site-canvas-admin button.pdf-btn-save-draft::before,
+#root .site-canvas-admin button.pdf-btn-save-draft::after,
+#root .site-canvas-admin button.pdf-btn-submit-data::before,
+#root .site-canvas-admin button.pdf-btn-submit-data::after,
+#root .site-canvas-admin button.pdf-btn-apply-batch::before,
+#root .site-canvas-admin button.pdf-btn-apply-batch::after {
+  display: none !important;
+  content: none !important;
+}
+
+#root .site-canvas-admin button.pdf-btn-cancel {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  box-shadow: none !important;
+}
+
+#root .site-canvas-admin button.pdf-btn-save-draft {
+  background: #b45309 !important;
+  border: 1px solid #92400e !important;
+  color: #ffffff !important;
+}
+
+#root .site-canvas-admin button.pdf-btn-submit-data,
+#root .site-canvas-admin button.pdf-btn-apply-batch {
+  background: #6d28d9 !important;
+  border: 1px solid #5b21b6 !important;
+  color: #ffffff !important;
+}
+
+#root .site-canvas-admin button.pdf-btn-save-draft *,
+#root .site-canvas-admin button.pdf-btn-submit-data *,
+#root .site-canvas-admin button.pdf-btn-apply-batch * {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+@media (max-width: 720px) {
+  .site-canvas-admin .admin-auth-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-canvas-admin .admin-auth-actions > * {
+    flex: 1 1 0;
+  }
+
+  .site-canvas-admin .admin-tabs {
+    margin-inline: -0.25rem;
+  }
+
+  .site-canvas-admin .pdf-confirmation-backdrop {
+    padding: 0 !important;
+  }
+
+  .site-canvas-admin .pdf-confirmation-dialog {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+  }
+
+  .site-canvas-admin .pdf-confirmation-header,
+  .site-canvas-admin .pdf-confirmation-toolbar,
+  .site-canvas-admin .pdf-confirmation-footer {
+    padding: 0.85rem 1rem !important;
+  }
+
+  .site-canvas-admin .pdf-confirmation-table-scroll {
+    padding: 0.85rem 1rem !important;
+  }
+
+  .site-canvas-admin .pdf-confirmation-footer {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .site-canvas-admin .pdf-confirmation-footer-actions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem !important;
+  }
+
+  #root .site-canvas-admin .pdf-confirmation-footer-actions button {
+    min-width: 0;
+    padding-inline: 0.65rem !important;
+    white-space: normal;
   }
 }

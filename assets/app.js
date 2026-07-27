@@ -945,16 +945,21 @@
 
   function Button({ children, variant = 'primary', className, ...props }) {
     const variants = {
-      primary: 'bg-slate-950 text-white hover:bg-slate-800 disabled:bg-slate-300',
-      blue: 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-200',
-      success: 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-200',
-      danger: 'bg-rose-600 text-white hover:bg-rose-700 disabled:bg-rose-200',
-      soft: 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:text-slate-300',
-      ghost: 'bg-transparent text-slate-600 hover:bg-slate-100',
+      primary: 'bg-slate-950 text-white hover:bg-slate-800 disabled:bg-slate-300 shadow-sm',
+      blue: 'bg-blue-600 text-white font-extrabold hover:bg-blue-700 disabled:bg-blue-200 shadow-sm',
+      success: 'bg-emerald-600 text-white font-extrabold hover:bg-emerald-700 disabled:bg-emerald-200 shadow-sm',
+      danger: 'bg-rose-600 text-white font-extrabold hover:bg-rose-700 disabled:bg-rose-200 shadow-sm',
+      purple: 'bg-purple-700 text-white font-black hover:bg-purple-800 disabled:bg-purple-300 shadow-md border border-purple-800/50',
+      amber: 'bg-amber-600 text-white font-black hover:bg-amber-700 disabled:bg-amber-200 shadow-md border border-amber-700/50',
+      soft: 'bg-white text-slate-800 font-extrabold ring-1 ring-slate-300 hover:bg-slate-100 disabled:text-slate-300 shadow-xs',
+      ghost: 'bg-transparent text-slate-700 font-extrabold hover:bg-slate-100',
     };
+    const compact = /\bh-(8|9)\b/.test(className || '');
     return h('button', {
       ...props,
-      className: cx('inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-black transition-colors duration-150 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed', variants[variant] || variants.primary, className),
+      'data-ui-button': '',
+      'data-button-variant': variant,
+      className: cx('ui-button inline-flex h-11 items-center justify-center rounded-2xl px-5 text-xs font-black transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-purple-200 disabled:cursor-not-allowed cursor-pointer', compact && 'ui-button--compact', variants[variant] || variants.primary, className),
     }, children);
   }
 
@@ -1263,6 +1268,642 @@
     );
   }
 
+  function PdfConfirmationModal({ isOpen, filename, rows, existingSources = [], existingDbRows = [], onUpdateField, onApplyBatchSource, onAddRow, onRemoveRow, onSaveDraft, onSubmit, onClose, submitting }) {
+    if (!isOpen) return null;
+
+    const allSources = useMemo(() => {
+      const set = new Set([
+        'DATA PERSEBARAN KAT',
+        'PENGUSULAN TIM KERJA PERSIAPAN ASESMEN',
+        'SURAT PENGUSULAN DINAS SOSIAL',
+        'LAPORAN PERSEBARAN HASIL VERVAL',
+      ]);
+      if (Array.isArray(existingSources)) {
+        existingSources.forEach(s => { if (s && String(s).trim()) set.add(String(s).trim()); });
+      }
+      if (Array.isArray(rows)) {
+        rows.forEach(r => { if (r && r.source_data && String(r.source_data).trim()) set.add(String(r.source_data).trim()); });
+      }
+      return Array.from(set);
+    }, [existingSources, rows]);
+
+    const defaultSource = allSources[0] || 'DATA PERSEBARAN KAT';
+    const [batchSource, setBatchSource] = useState(rows?.[0]?.source_data || defaultSource);
+
+    useEffect(() => {
+      const firstSource = rows?.[0]?.source_data;
+      if (firstSource && !firstSource.startsWith('PDF ')) {
+        setBatchSource(firstSource);
+      } else if (allSources[0]) {
+        setBatchSource(allSources[0]);
+      } else {
+        setBatchSource('DATA PERSEBARAN KAT');
+      }
+    }, [filename, rows, allSources]);
+
+    function normalizeLocStr(str) {
+      if (!str) return '';
+      return String(str)
+        .toLowerCase()
+        .replace(/^(kab\.?|kabupaten|kota|kec\.?|kecamatan|distrik|desa|kel\.?|kelurahan|dusun|lokasi)\s+/i, '')
+        .replace(/[^a-z0-9]/g, '');
+    }
+
+    function findDbMatch(r, dbList) {
+      if (!r || !Array.isArray(dbList) || !dbList.length) return null;
+      const normReg = normalizeLocStr(r.regency);
+      const normDist = normalizeLocStr(r.district);
+      const normVill = normalizeLocStr(r.village);
+      const normLoc = normalizeLocStr(r.location);
+      const normTribe = normalizeLocStr(r.tribe);
+
+      if (!normReg && !normDist && !normVill && !normLoc) return null;
+
+      return dbList.find(db => {
+        const dbReg = normalizeLocStr(db.regency);
+        const dbDist = normalizeLocStr(db.district);
+        const dbVill = normalizeLocStr(db.village);
+        const dbLoc = normalizeLocStr(db.location);
+        const dbTribe = normalizeLocStr(db.tribe);
+
+        if (normReg && dbReg && normReg === dbReg) {
+          if (normLoc && dbLoc && normLoc === dbLoc) return true;
+          if (normVill && dbVill && normVill === dbVill) return true;
+          if (normLoc && dbVill && normLoc === dbVill) return true;
+          if (normVill && dbLoc && normVill === dbLoc) return true;
+          if (normDist && dbDist && normDist === dbDist && normTribe && dbTribe && normTribe === dbTribe) return true;
+        }
+
+        if (normDist && dbDist && normDist === dbDist) {
+          if (normVill && dbVill && normVill === dbVill) return true;
+          if (normLoc && dbLoc && normLoc === dbLoc) return true;
+        }
+
+        return false;
+      }) || null;
+    }
+
+    const rowsWithMatch = useMemo(() => {
+      if (!Array.isArray(rows)) return [];
+      return rows.map(r => ({
+        ...r,
+        _dbMatch: findDbMatch(r, existingDbRows)
+      }));
+    }, [rows, existingDbRows]);
+
+    const existingInDbCount = useMemo(() => {
+      return rowsWithMatch.filter(r => Boolean(r._dbMatch)).length;
+    }, [rowsWithMatch]);
+
+    const newLocationCount = Math.max(0, (rows || []).length - existingInDbCount);
+
+    function handleApplyBatch() {
+      if (typeof onApplyBatchSource === 'function') {
+        onApplyBatchSource(batchSource);
+      }
+    }
+
+    function handleSaveDraft() {
+      if (typeof onSaveDraft === 'function') {
+        onSaveDraft(batchSource);
+      }
+    }
+
+    return h('div', {
+      className: 'pdf-confirmation-backdrop',
+      style: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 99999,
+        backgroundColor: 'rgba(15, 23, 42, 0.78)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.25rem'
+      }
+    },
+      h('div', {
+        className: 'pdf-confirmation-dialog',
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          height: '88vh',
+          maxHeight: '88vh',
+          width: '100%',
+          maxWidth: '85rem',
+          backgroundColor: '#ffffff',
+          borderRadius: '1.75rem',
+          border: '1.5px solid #cbd5e1',
+          boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.4)',
+          overflow: 'hidden'
+        }
+      },
+        // Header Modal (AJEG / FIXED)
+        h('div', {
+          className: 'pdf-confirmation-header',
+          style: {
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '1px solid #e2e8f0',
+            backgroundColor: '#f8fafc',
+            padding: '1.15rem 1.75rem'
+          }
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '1rem' } },
+            h('div', { style: { display: 'grid', placeItems: 'center', width: '2.75rem', height: '2.75rem', borderRadius: '1rem', background: 'linear-gradient(135deg, #6d28d9, #4f46e5)', color: '#ffffff', boxShadow: '0 4px 12px rgba(109, 40, 217, 0.3)', flexShrink: 0 } },
+              h(Icon, { name: 'Sparkles', size: 22 })
+            ),
+            h('div', null,
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: '0.75rem' } },
+                h('h3', { style: { fontSize: '1.1rem', fontWeight: 900, color: '#0f172a', margin: 0, lineHeight: 1.2 } }, 'Konfirmasi & Edit Hasil Pembacaan Gemini AI'),
+                h('span', {
+                  style: {
+                    backgroundColor: existingInDbCount > 0 ? '#fef3c7' : '#f3e8ff',
+                    color: existingInDbCount > 0 ? '#92400e' : '#6d28d9',
+                    border: `1px solid ${existingInDbCount > 0 ? '#fcd34d' : '#d8b4fe'}`,
+                    padding: '0.2rem 0.75rem',
+                    borderRadius: '999px',
+                    fontWeight: 900,
+                    fontSize: '0.72rem'
+                  }
+                }, `${rows.length} Lokasi Ditemukan (${newLocationCount} Baru${existingInDbCount > 0 ? `, ⚠️ ${existingInDbCount} Sudah Ada di DB` : ''})`)
+              ),
+              h('p', { style: { fontSize: '0.78rem', fontWeight: 600, color: '#475569', margin: '0.2rem 0 0 0' } }, `Dokumen: ${filename || 'PDF'} • Periksa dan sesuaikan data di tabel sebelum disimpan ke database`)
+            )
+          ),
+          h('button', {
+            type: 'button',
+            onClick: onClose,
+            style: { display: 'grid', placeItems: 'center', width: '2.5rem', height: '2.5rem', borderRadius: '0.75rem', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', color: '#475569', cursor: 'pointer' },
+            title: 'Tutup'
+          }, h(Icon, { name: 'X', size: 18 }))
+        ),
+
+        // Control Bar (Batch Sumber Data + Warning Banner - AJEG / FIXED)
+        h('div', {
+          className: 'pdf-confirmation-toolbar',
+          style: {
+            flexShrink: 0,
+            backgroundColor: '#faf5ff',
+            borderBottom: '1px solid #e9d5ff',
+            padding: '0.85rem 1.75rem',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem'
+          }
+        },
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: '0.35rem' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#581c87', fontWeight: 800, fontSize: '0.78rem' } },
+              h(Icon, { name: 'Info', size: 16, style: { stroke: '#7e22ce', color: '#7e22ce', flexShrink: 0 } }),
+              h('span', null, 'Pilih Sumber Data dari dropdown atau ketik nama sumber baru pada kolom pencarian combobox.')
+            ),
+            existingInDbCount > 0 ? h('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: '#92400e', fontWeight: 800, fontSize: '0.75rem', backgroundColor: '#fef3c7', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', border: '1px solid #fcd34d' } },
+              h(Icon, { name: 'AlertTriangle', size: 14, style: { stroke: '#d97706', color: '#d97706', flexShrink: 0 } }),
+              h('span', null, `⚠️ Terdeteksi ${existingInDbCount} lokasi yang SUDAH ADA di Database Excel Home (Ditandai lencana "Sudah Ada di DB").`)
+            ) : null
+          ),
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' } },
+            h('span', { style: { fontWeight: 900, color: '#1e293b', fontSize: '0.78rem' } }, 'Sumber Data Utama:'),
+            h('div', { style: { width: '22rem' } },
+              h(SelectInput, {
+                value: batchSource,
+                onChange: e => setBatchSource(e.target.value),
+                searchable: true,
+                allowCustom: true,
+                searchPlaceholder: 'Ketik nama sumber data baru...',
+                customOptionLabel: text => `+ Gunakan "${text}" sebagai sumber baru`,
+                className: 'w-full shadow-xs font-bold text-xs'
+              },
+                Array.from(new Set([...allSources, batchSource].filter(Boolean))).map(src =>
+                  h('option', { key: src, value: src }, src)
+                )
+              )
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                onClick: handleApplyBatch,
+                className: 'pdf-btn-apply-batch',
+                style: {
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+
+                  height: '2.6rem',
+                  padding: '0 1.25rem',
+
+                  backgroundColor: '#6d28d9',
+                  color: '#ffffff',
+
+                  border: '1.5px solid #5b21b6',
+                  borderRadius: '0.75rem',
+                  boxShadow: '0 4px 12px rgba(109, 40, 217, 0.3)',
+
+                  fontSize: '0.78rem',
+                  fontWeight: 900,
+                  lineHeight: 1,
+                  whiteSpace: 'nowrap',
+
+                  cursor: 'pointer'
+                }
+              },
+
+              h(Icon, {
+                name: 'CheckCheck',
+                size: 15,
+                style: {
+                  color: '#ffffff',
+                  stroke: '#ffffff',
+                  flexShrink: 0
+                }
+              }),
+
+              h(
+                'span',
+                {
+                  style: {
+                    color: 'inherit',
+                    fontWeight: 'inherit'
+                  }
+                },
+                'Terapkan ke Semua Baris'
+              )
+            )
+          )
+        ),
+
+        // Scrollable Table Container (MIN-WIDTH 1980px DENGAN KOLOM STATUS DB)
+        h('div', {
+          className: 'pdf-confirmation-table-scroll',
+          style: {
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'auto',
+            padding: '1.25rem 1.75rem',
+            backgroundColor: '#f8fafc'
+          }
+        },
+          h('div', { style: { minWidth: '1980px', borderRadius: '1rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' } },
+            h('table', { style: { width: '100%', textAlign: 'left', fontSize: '0.75rem', borderCollapse: 'collapse' } },
+              h('thead', { style: { backgroundColor: '#f1f5f9', color: '#0f172a', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.7rem', borderBottom: '1.5px solid #cbd5e1' } },
+                h('tr', null,
+                  h('th', { style: { padding: '0.85rem 0.5rem', textAlign: 'center', width: '3.5rem', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, '#'),
+                  h('th', { style: { padding: '0.85rem 0.65rem', minWidth: '145px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Status DB (Deteksi)'),
+                  h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '220px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Sumber Data (Combobox)'),
+                  h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '150px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Suku / Komunitas'),
+                  h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '150px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Provinsi *'),
+                  h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '150px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Kabupaten / Kota'),
+                  h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '150px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Kecamatan / Distrik'),
+                  h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '150px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Desa / Kelurahan'),
+                  h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '150px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Lokasi / Dusun'),
+                  h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '110px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'KK Perseb.'),
+                  h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '110px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'KK Total'),
+                  h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '110px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Tahun'),
+                  h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '95px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Usulan'),
+                  h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '160px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Catatan'),
+                  h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '80px', textAlign: 'center', whiteSpace: 'nowrap' } }, 'Aksi')
+                )
+              ),
+              h('tbody', { style: { backgroundColor: '#ffffff' } },
+                rowsWithMatch.length ? rowsWithMatch.map((row, idx) =>
+                  h('tr', { key: idx, style: { borderBottom: '1px solid #f1f5f9', backgroundColor: row._dbMatch ? '#fffbeb' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc') } },
+                    h('td', { style: { padding: '0.6rem 0.4rem', textAlign: 'center', fontWeight: 900, color: '#64748b', borderRight: '1px solid #f1f5f9' } }, idx + 1),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9', textAlign: 'center' } },
+                      row._dbMatch ? h('span', {
+                        title: `Sudah ada di DB Excel Home: ${row._dbMatch.tribe || 'KAT'} - ${row._dbMatch.location || row._dbMatch.village || ''}, ${row._dbMatch.regency || ''}`,
+                        style: { display: 'inline-flex', alignItems: 'center', gap: '0.3rem', backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d', padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.71rem', fontWeight: 900, cursor: 'help' }
+                      },
+                        h(Icon, { name: 'AlertCircle', size: 13, style: { stroke: '#d97706', color: '#d97706' } }),
+                        'Sudah Ada di DB'
+                      ) : h('span', {
+                        title: 'Lokasi baru, belum ada di Database Excel Home',
+                        style: { display: 'inline-flex', alignItems: 'center', gap: '0.3rem', backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #86efac', padding: '0.25rem 0.6rem', borderRadius: '999px', fontSize: '0.71rem', fontWeight: 900, cursor: 'help' }
+                      },
+                        h(Icon, { name: 'Sparkles', size: 13, style: { stroke: '#16a34a', color: '#16a34a' } }),
+                        'Baru (Belum Ada)'
+                      )
+                    ),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h(SelectInput, {
+                      value: row.source_data || batchSource || defaultSource,
+                      onChange: e => onUpdateField(idx, 'source_data', e.target.value),
+                      searchable: true,
+                      allowCustom: true,
+                      searchPlaceholder: 'Cari/ketik sumber...',
+                      customOptionLabel: text => `+ Gunakan "${text}"`,
+                      className: 'w-full text-xs font-bold'
+                    },
+                      Array.from(new Set([...allSources, row.source_data].filter(Boolean))).map(src =>
+                        h('option', { key: src, value: src }, src)
+                      )
+                    )),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'text', className: 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-purple-600 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all', value: row.tribe || '', onChange: e => onUpdateField(idx, 'tribe', e.target.value), placeholder: 'Suku KAT' })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'text', className: 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-purple-600 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all', value: row.province || '', onChange: e => onUpdateField(idx, 'province', e.target.value), placeholder: 'Provinsi' })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'text', className: 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-purple-600 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all', value: row.regency || '', onChange: e => onUpdateField(idx, 'regency', e.target.value), placeholder: 'Kab/Kota' })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'text', className: 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-purple-600 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all', value: row.district || '', onChange: e => onUpdateField(idx, 'district', e.target.value), placeholder: 'Kecamatan' })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'text', className: 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-purple-600 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all', value: row.village || '', onChange: e => onUpdateField(idx, 'village', e.target.value), placeholder: 'Desa/Kel' })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'text', className: 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-purple-600 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all', value: row.location || '', onChange: e => onUpdateField(idx, 'location', e.target.value), placeholder: 'Dusun/Lokasi' })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'number', min: '0', style: { width: '100%', height: '2.5rem', borderRadius: '0.65rem', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', padding: '0 0.5rem', fontSize: '0.78rem', textAlign: 'center', fontWeight: 900, color: '#0f172a' }, value: row.households_spread ?? '', onChange: e => onUpdateField(idx, 'households_spread', e.target.value ? parseInt(e.target.value, 10) : null) })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'number', min: '0', style: { width: '100%', height: '2.5rem', borderRadius: '0.65rem', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', padding: '0 0.5rem', fontSize: '0.78rem', textAlign: 'center', fontWeight: 900, color: '#0f172a' }, value: row.households_total ?? '', onChange: e => onUpdateField(idx, 'households_total', e.target.value ? parseInt(e.target.value, 10) : null) })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'number', min: '1900', style: { width: '100%', height: '2.5rem', borderRadius: '0.65rem', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', padding: '0 0.5rem', fontSize: '0.78rem', textAlign: 'center', fontWeight: 900, color: '#0f172a' }, value: row.data_year ?? '', onChange: e => onUpdateField(idx, 'data_year', e.target.value ? parseInt(e.target.value, 10) : null) })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', textAlign: 'center', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'checkbox', style: { width: '1.35rem', height: '1.35rem', cursor: 'pointer', accentColor: '#6d28d9' }, checked: Boolean(row.is_proposed), onChange: e => onUpdateField(idx, 'is_proposed', e.target.checked ? 1 : 0) })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'text', className: 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-purple-600 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all', value: row.notes || '', onChange: e => onUpdateField(idx, 'notes', e.target.value), placeholder: 'Catatan' })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', textAlign: 'center' } }, h('button', { type: 'button', onClick: () => onRemoveRow(idx), style: { display: 'grid', placeItems: 'center', width: '2.5rem', height: '2.5rem', borderRadius: '0.75rem', color: '#dc2626', backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', cursor: 'pointer', margin: '0 auto' }, title: 'Hapus baris' }, h(Icon, { name: 'Trash2', size: 16 })))
+                  )
+                ) : h('tr', null, h('td', { colSpan: 15, style: { padding: '4rem 1rem', textAlign: 'center', fontWeight: 900, color: '#94a3b8', fontSize: '0.85rem' } }, 'Belum ada baris data. Klik "+ Tambah Baris Manual" di bawah untuk menambah.'))
+              )
+            )
+          ),
+          h('div', { style: { marginTop: '1rem', display: 'flex', justifyContent: 'flex-start' } },
+            h('button', {
+              type: 'button',
+              onClick: onAddRow,
+              style: { display: 'inline-flex', alignItems: 'center', gap: '0.5rem', borderRadius: '0.85rem', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', padding: '0.6rem 1.15rem', fontSize: '0.78rem', fontWeight: 900, color: '#0f172a', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', cursor: 'pointer' }
+            },
+              h(Icon, { name: 'Plus', size: 16, style: { stroke: '#6d28d9', color: '#6d28d9' } }),
+              'Tambah Baris Manual'
+            )
+          )
+        ),
+
+        // Footer Modal (AJEG / STICKY AT BOTTOM WITH HIGH SPECIFICITY BUTTONS)
+        h('div', {
+          className: 'pdf-confirmation-footer',
+          style: {
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderTop: '1px solid #e2e8f0',
+            backgroundColor: '#f8fafc',
+            padding: '1.15rem 1.75rem'
+          }
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.78rem', fontWeight: 800, color: '#334155' } },
+            h('span', { style: { display: 'grid', placeItems: 'center', width: '1.75rem', height: '1.75rem', borderRadius: '50%', backgroundColor: '#f3e8ff', color: '#6d28d9', fontWeight: 900, fontSize: '0.78rem', border: '1px solid #d8b4fe' } }, rows.length),
+            h('span', null, `lokasi persebaran dikonfirmasi (${newLocationCount} baru, ${existingInDbCount} terdaftar di DB)`)
+          ),
+          h('div', { className: 'pdf-confirmation-footer-actions', style: { display: 'flex', alignItems: 'center', gap: '0.75rem' } },
+            h('button', {
+              type: 'button',
+              onClick: onClose,
+              disabled: submitting,
+              className: 'pdf-btn-cancel',
+              style: {
+                height: '2.85rem',
+                padding: '0 1.35rem',
+                borderRadius: '0.85rem',
+                backgroundColor: '#ffffff',
+                background: '#ffffff',
+                color: '#334155',
+                fontSize: '0.82rem',
+                fontWeight: 900,
+                border: '1.5px solid #cbd5e1',
+                cursor: 'pointer'
+              }
+            }, h('span', { style: { color: '#334155', fontWeight: 900 } }, 'Batal')),
+
+            h('button', {
+              type: 'button',
+              onClick: handleSaveDraft,
+              disabled: submitting || !rows.length,
+              className: 'pdf-btn-save-draft',
+              style: {
+                height: '2.85rem',
+                padding: '0 1.5rem',
+                borderRadius: '0.85rem',
+                backgroundColor: '#d97706',
+                background: '#d97706',
+                color: '#ffffff',
+                fontSize: '0.82rem',
+                fontWeight: 900,
+                border: '1.5px solid #b45309',
+                boxShadow: '0 4px 14px rgba(217, 119, 6, 0.4)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer'
+              }
+            },
+              h(Icon, { name: 'BookmarkCheck', size: 16, style: { stroke: '#ffffff', color: '#ffffff' } }),
+              h('span', { style: { color: '#ffffff', fontWeight: 900 } }, 'Simpan Draft Lokal')
+            ),
+
+            h('button', {
+              type: 'button',
+              onClick: onSubmit,
+              disabled: submitting || !rows.length,
+              className: 'pdf-btn-submit-data',
+              style: {
+                height: '2.85rem',
+                padding: '0 1.75rem',
+                borderRadius: '0.85rem',
+                background: 'linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%)',
+                backgroundColor: '#6d28d9',
+                color: '#ffffff',
+                fontSize: '0.82rem',
+                fontWeight: 900,
+                border: '1.5px solid #5b21b6',
+                boxShadow: '0 6px 20px rgba(109, 40, 217, 0.45)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer'
+              }
+            },
+              h(Icon, { name: 'Check', size: 16, style: { stroke: '#ffffff', color: '#ffffff' } }),
+              h('span', { style: { color: '#ffffff', fontWeight: 900 } }, submitting ? 'Menyimpan ke DB...' : `Submit (${rows.length} Data)`)
+            )
+          )
+        )
+      )
+    );
+  }
+
+  function PdfProcessingProgressModal({ isOpen, filename, progressPercent, statusText, secondsElapsed }) {
+    if (!isOpen) return null;
+
+    const formattedTime = `${String(Math.floor(secondsElapsed / 60)).padStart(2, '0')}:${String(secondsElapsed % 60).padStart(2, '0')}`;
+    const percentInt = Math.min(100, Math.max(0, Math.round(progressPercent)));
+    const stageLabel = percentInt >= 90 ? 'Menyusun Tabel Hasil' : percentInt >= 35 ? 'Analisis AI Gemini' : 'Mengunggah & Membaca PDF';
+
+    return h('div', {
+      style: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 99999,
+        backgroundColor: 'rgba(15, 23, 42, 0.78)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.25rem'
+      }
+    },
+      h('div', {
+        style: {
+          position: 'relative',
+          width: '100%',
+          maxWidth: '28rem',
+          backgroundColor: '#ffffff',
+          borderRadius: '1.75rem',
+          border: '1.5px solid rgba(139, 92, 246, 0.3)',
+          boxShadow: '0 25px 60px -15px rgba(109, 40, 217, 0.4), 0 0 40px rgba(99, 102, 241, 0.2)',
+          padding: '2rem 1.75rem 1.75rem 1.75rem',
+          overflow: 'hidden',
+          textAlign: 'center'
+        }
+      },
+        // Top Animated Bar
+        h('div', {
+          style: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '6px',
+            background: 'linear-gradient(90deg, #7c3aed 0%, #4f46e5 50%, #06b6d4 100%)'
+          }
+        }),
+
+        // Center Icon Badge
+        h('div', {
+          style: {
+            margin: '0 auto 1rem auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '4.25rem',
+            height: '4.25rem',
+            borderRadius: '1.25rem',
+            background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
+            border: '2px solid #c7d2fe',
+            boxShadow: '0 8px 24px rgba(124, 58, 237, 0.2)',
+            color: '#6d28d9'
+          }
+        },
+          h(Icon, { name: 'Sparkles', size: 32, style: { stroke: '#6d28d9', color: '#6d28d9' } })
+        ),
+
+        // Title
+        h('h3', { style: { fontSize: '1.2rem', fontWeight: 900, color: '#0f172a', margin: '0 0 0.35rem 0', lineHeight: 1.2 } }, 'Gemini AI Membaca PDF'),
+
+        // Filename Badge
+        h('div', { style: { display: 'flex', justifyContent: 'center' } },
+          h('span', {
+            style: {
+              backgroundColor: '#f3e8ff',
+              color: '#7e22ce',
+              border: '1px solid #d8b4fe',
+              padding: '0.3rem 0.85rem',
+              borderRadius: '999px',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              maxWidth: '100%',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }
+          }, filename || 'Dokumen PDF')
+        ),
+
+        // Progress Section
+        h('div', { style: { marginTop: '1.5rem', marginBottom: '1.25rem' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' } },
+            h('span', { style: { color: '#6d28d9', fontWeight: 900, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' } },
+              h('span', { style: { display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#7c3aed', boxShadow: '0 0 8px #7c3aed' } }),
+              statusText || 'Memproses...'
+            ),
+            h('span', { style: { fontSize: '1.5rem', fontWeight: 900, color: '#4f46e5', lineHeight: 1 } }, `${percentInt}%`)
+          ),
+
+          // Outer Track
+          h('div', {
+            style: {
+              height: '1rem',
+              width: '100%',
+              borderRadius: '999px',
+              backgroundColor: '#f1f5f9',
+              border: '1.5px solid #cbd5e1',
+              padding: '2px',
+              overflow: 'hidden',
+              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.06)'
+            }
+          },
+            // Inner Fill Bar
+            h('div', {
+              style: {
+                height: '100%',
+                borderRadius: '999px',
+                background: 'linear-gradient(90deg, #7c3aed 0%, #4f46e5 50%, #2563eb 100%)',
+                boxShadow: '0 0 12px rgba(124, 58, 237, 0.6)',
+                width: `${Math.max(5, percentInt)}%`,
+                transition: 'width 0.35s ease-out'
+              }
+            })
+          )
+        ),
+
+        // 2 Metric Cards
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', textAlign: 'left' } },
+          h('div', {
+            style: {
+              borderRadius: '1rem',
+              backgroundColor: '#f8fafc',
+              padding: '0.85rem 1rem',
+              border: '1.5px solid #e2e8f0'
+            }
+          },
+            h('span', { style: { display: 'block', fontSize: '0.65rem', fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'WAKTU BERJALAN'),
+            h('span', { style: { display: 'block', fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', marginTop: '0.15rem' } }, formattedTime)
+          ),
+          h('div', {
+            style: {
+              borderRadius: '1rem',
+              backgroundColor: '#fdf4ff',
+              padding: '0.85rem 1rem',
+              border: '1.5px solid #f5d0fe'
+            }
+          },
+            h('span', { style: { display: 'block', fontSize: '0.65rem', fontWeight: 900, color: '#a21caf', textTransform: 'uppercase', letterSpacing: '0.05em' } }, 'TAHAP PROSES'),
+            h('span', { style: { display: 'block', fontSize: '0.85rem', fontWeight: 900, color: '#86198f', marginTop: '0.2rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, stageLabel)
+          )
+        ),
+
+        // Bottom Hint Box
+        h('div', {
+          style: {
+            marginTop: '1.25rem',
+            padding: '0.75rem 1rem',
+            borderRadius: '0.85rem',
+            backgroundColor: '#f5f3ff',
+            border: '1px solid #ddd6fe',
+            textAlign: 'center'
+          }
+        },
+          h('p', { style: { fontSize: '0.78rem', fontWeight: 700, color: '#4c1d95', margin: 0, lineHeight: 1.45 } },
+            '💡 Gemini AI sedang mengekstrak narasi surat & lokasi persebaran. Layar konfirmasi tabel akan terbuka otomatis.'
+          )
+        )
+      )
+    );
+  }
+
   function PreviewTable({ rows, maxHeight = 420 }) {
     const columns = useMemo(() => {
       if (!rows?.length) return [];
@@ -1312,7 +1953,7 @@
         h('span', { className: 'text-xs font-bold text-slate-500' }, `${compactNumber(rows.length)} baris tampil`)
       ),
       h('div', { className: 'overflow-auto', style: { maxHeight } },
-        h('table', { className: 'preview-table min-w-full border-separate border-spacing-0 text-left text-sm' },
+        h('table', { className: 'preview-table min-w-max border-separate border-spacing-0 text-left text-sm' },
           h('thead', { className: 'sticky top-0 z-10 bg-slate-950 text-white' },
             h('tr', null, columns.map(column => h('th', { key: column, className: 'preview-heading border-r border-white/10 px-3 py-3 text-xs font-black uppercase', title: column }, displayColumnName(column))))
           ),
@@ -1350,10 +1991,10 @@
         }, content);
       }
       return h('span', {
-      key: source.source_data || source.label,
-      className: 'inline-flex max-w-full items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200',
-      title,
-    }, content);
+        key: source.source_data || source.label,
+        className: 'inline-flex max-w-full items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200',
+        title,
+      }, content);
     }));
   }
 
@@ -1680,10 +2321,10 @@
         )
       ),
       hasBnba ? h('div', { className: 'bnba-table-shell mt-4 overflow-auto rounded-2xl border border-slate-200' },
-        h('table', { className: 'bnba-table min-w-full text-left text-xs' },
+        h('table', { className: 'bnba-table min-w-max text-left text-xs' },
           h('thead', null,
             h('tr', null, columns.map(([key, label]) =>
-              h('th', { key, className: 'align-top' },
+              h('th', { key, className: 'px-3 py-2 align-top' },
                 h('button', { type: 'button', className: 'bnba-sort-button', onClick: () => toggleSort(key) },
                   h('span', null, label),
                   h(Icon, { name: sort.key === key ? (sort.dir === 'asc' ? 'ArrowUp' : 'ArrowDown') : 'ArrowUpDown', size: 13 })
@@ -1695,7 +2336,7 @@
           h('tbody', null,
             filteredRows.length ? filteredRows.slice(0, 300).map((row, idx) =>
               h('tr', { key: `${row.nomor_kk || idx}-${idx}` },
-                columns.map(([key]) => h('td', { key, title: String(row[key] ?? '') },
+                columns.map(([key]) => h('td', { key, title: String(row[key] ?? ''), className: 'px-3 py-2 align-top' },
                   key === 'jenis'
                     ? h(Badge, { status: row.jenis === 'duplikat' ? 'pending' : 'checked' }, row.jenis || '-')
                     : String(row[key] ?? '-')
@@ -1794,22 +2435,21 @@
                 h('span', null, `${fullNumber(group.rows.length)} entri`)
               ),
               h('div', { className: 'stat-detail-list' },
-                group.rows.slice(0, 140).map((row, index) =>
-                  {
-                    const households = householdMetrics(row);
-                    return h('article', { key: `${group.name}-${row.name}-${row.region_code || index}`, className: 'stat-detail-row' },
-                      h('div', { className: 'min-w-0' },
-                        h('h3', { title: row.name }, row.name || '-'),
-                        h('div', { className: 'stat-detail-chips' }, renderLocationMeta(row))
-                      ),
-                      h('div', { className: 'stat-detail-counts' },
-                        h('span', null, h(Icon, { name: 'LocateFixed', size: 14 }), `${fullNumber(row.locations || 0)} lokasi`),
-                        h('span', { title: householdSummaryText(row) }, h(Icon, { name: 'Users', size: 14 }), `${fullNumber(households.effective)} KK final`),
-                        h('span', { title: 'KK dari angka awal Excel/persebaran' }, h(Icon, { name: 'Table', size: 14 }), `${fullNumber(households.distribution)} by Excel`),
-                        h('span', { title: 'KK unik dari hasil padan BNBA' }, h(Icon, { name: 'FileSpreadsheet', size: 14 }), `${fullNumber(households.bnba)} by padan`)
-                      )
-                    );
-                  }
+                group.rows.slice(0, 140).map((row, index) => {
+                  const households = householdMetrics(row);
+                  return h('article', { key: `${group.name}-${row.name}-${row.region_code || index}`, className: 'stat-detail-row' },
+                    h('div', { className: 'min-w-0' },
+                      h('h3', { title: row.name }, row.name || '-'),
+                      h('div', { className: 'stat-detail-chips' }, renderLocationMeta(row))
+                    ),
+                    h('div', { className: 'stat-detail-counts' },
+                      h('span', null, h(Icon, { name: 'LocateFixed', size: 14 }), `${fullNumber(row.locations || 0)} lokasi`),
+                      h('span', { title: householdSummaryText(row) }, h(Icon, { name: 'Users', size: 14 }), `${fullNumber(households.effective)} KK final`),
+                      h('span', { title: 'KK dari angka awal Excel/persebaran' }, h(Icon, { name: 'Table', size: 14 }), `${fullNumber(households.distribution)} by Excel`),
+                      h('span', { title: 'KK unik dari hasil padan BNBA' }, h(Icon, { name: 'FileSpreadsheet', size: 14 }), `${fullNumber(households.bnba)} by padan`)
+                    )
+                  );
+                }
                 )
               )
             )
@@ -2730,7 +3370,7 @@
                 const maxZoom = mapLevel === 'province' ? 6 : mapLevel === 'regency' ? 8 : 10;
                 map.fitBounds(bounds.pad(0.08), { padding: [24, 24], maxZoom, animate: false });
               }
-            } catch (_) {}
+            } catch (_) { }
           };
           requestAnimationFrame(fitLayer);
           setTimeout(fitLayer, 90);
@@ -2894,40 +3534,41 @@
             ),
             h(SourcePills, { sources: activeSources, selectedSource, onSelect: source => { setSelectedSource(source); loadData({ source }); } })
           ) : null,
-            selectedItem ? h('div', { className: 'mt-4' }, h(LocationDetailPanel, { item: selectedItem, onClose: () => setSelectedItem(null), onStartPadan })) : null,
+          selectedItem ? h('div', { className: 'mt-4' }, h(LocationDetailPanel, { item: selectedItem, onClose: () => setSelectedItem(null), onStartPadan })) : null,
           h('div', { className: 'location-list mt-4 grid max-h-[470px] gap-3 overflow-auto pr-1' },
             items.length ? items.map((item, idx) => {
               const key = locationItemKey(item, idx);
               const selected = (selectedItem && locationItemKey(selectedItem, selectedItem.__idx ?? idx) === key) || locationScopeSelected(item);
               const households = householdMetrics(item);
               return h('article', { key, className: cx('location-card rounded-2xl border p-3 transition-colors duration-150', selected ? 'is-map-linked border-blue-200 bg-blue-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200 hover:bg-white') },
-              h('button', { type: 'button', className: 'location-card-main text-left', onClick: () => selectLocationOnMap(item, idx) },
-                h('div', { className: 'flex items-start justify-between gap-3' },
-                  h('div', { className: 'min-w-0' },
-                    h('p', { className: 'break-words text-sm font-black text-slate-950', title: item.title }, item.title || '-'),
-                    h('p', { className: 'mt-1 text-xs leading-5 text-slate-500' }, itemLocationLine(item))
+                h('button', { type: 'button', className: 'location-card-main text-left', onClick: () => selectLocationOnMap(item, idx) },
+                  h('div', { className: 'flex items-start justify-between gap-3' },
+                    h('div', { className: 'min-w-0' },
+                      h('p', { className: 'break-words text-sm font-black text-slate-950', title: item.title }, item.title || '-'),
+                      h('p', { className: 'mt-1 text-xs leading-5 text-slate-500' }, itemLocationLine(item))
+                    ),
+                    h('span', { className: 'flex shrink-0 items-center gap-2' },
+                      h(Badge, { status: item.status }, item.status),
+                      item.bnba_summary?.has_bnba ? h(Badge, { status: 'checked' }, 'BNBA') : null,
+                      h(Icon, { name: 'ChevronRight', size: 16, className: 'text-slate-400' })
+                    )
                   ),
-                  h('span', { className: 'flex shrink-0 items-center gap-2' },
-                    h(Badge, { status: item.status }, item.status),
-                    item.bnba_summary?.has_bnba ? h(Badge, { status: 'checked' }, 'BNBA') : null,
-                    h(Icon, { name: 'ChevronRight', size: 16, className: 'text-slate-400' })
+                  item.address ? h('p', { className: 'mt-2 break-words text-xs leading-5 text-slate-600' }, item.address) : null,
+                  h('div', { className: 'mt-2 flex flex-wrap items-center gap-2 text-xs font-black text-slate-600' },
+                    households.distribution ? h('span', { className: 'inline-flex items-center gap-1 rounded-full px-2 py-1', title: householdSummaryText(item) }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} KK by Excel`) : null,
+                    households.bnba ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-200', title: householdSummaryText(item) }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(households.bnba)} KK by padan`) : null,
+                    !households.distribution && !households.bnba && households.effective ? h('span', { className: 'inline-flex items-center gap-1 rounded-full px-2 py-1', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK final`) : null,
+                    households.delta ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-200' }, h(Icon, { name: 'Activity', size: 13 }), `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)}`) : null,
+                    item.source_data ? h('span', { className: 'max-w-full break-words rounded-full px-2 py-1', title: item.source_data }, item.source_data) : null,
+                    item.data_year ? h('span', { className: 'rounded-full px-2 py-1' }, item.data_year) : null
                   )
                 ),
-                item.address ? h('p', { className: 'mt-2 break-words text-xs leading-5 text-slate-600' }, item.address) : null,
-                h('div', { className: 'mt-2 flex flex-wrap items-center gap-2 text-xs font-black text-slate-600' },
-                  households.distribution ? h('span', { className: 'inline-flex items-center gap-1 rounded-full px-2 py-1', title: householdSummaryText(item) }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} KK by Excel`) : null,
-                  households.bnba ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-200', title: householdSummaryText(item) }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(households.bnba)} KK by padan`) : null,
-                  !households.distribution && !households.bnba && households.effective ? h('span', { className: 'inline-flex items-center gap-1 rounded-full px-2 py-1', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK final`) : null,
-                  households.delta ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-200' }, h(Icon, { name: 'Activity', size: 13 }), `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)}`) : null,
-                  item.source_data ? h('span', { className: 'max-w-full break-words rounded-full px-2 py-1', title: item.source_data }, item.source_data) : null,
-                  item.data_year ? h('span', { className: 'rounded-full px-2 py-1' }, item.data_year) : null
+                h('button', { type: 'button', className: 'location-card-padan', onClick: () => onStartPadan?.(item) },
+                  h(Icon, { name: 'UploadCloud', size: 14 }),
+                  'Padankan lokasi ini'
                 )
-              ),
-              h('button', { type: 'button', className: 'location-card-padan', onClick: () => onStartPadan?.(item) },
-                h(Icon, { name: 'UploadCloud', size: 14 }),
-                'Padankan lokasi ini'
-              )
-            ); }) : h('div', { className: 'rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500' }, 'Belum ada data pada filter ini.')
+              );
+            }) : h('div', { className: 'rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500' }, 'Belum ada data pada filter ini.')
           )
         )
       ),
@@ -3888,11 +4529,11 @@
 
     return h('main', { className: 'grid gap-5' },
       h('section', { className: 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' },
-        h('div', { className: 'grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]' },
+        h('div', { className: 'admin-auth-grid grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]' },
           h(Field, { label: 'Admin key' }, h(TextInput, { type: 'password', value: key, onChange: event => setKey(event.target.value), placeholder: 'ADMIN_KEY' })),
-          h('div', { className: 'flex items-end gap-2' },
+          h('div', { className: 'admin-auth-actions flex items-end gap-2' },
             h(Button, { type: 'button', variant: 'blue', disabled: loading || !key, onClick: loadJobs }, loading ? 'Memuat...' : 'Muat'),
-            h('a', { href: key ? apiUrl(`export_jobs.php?key=${encodeURIComponent(key)}`) : '#', className: 'inline-flex h-11 items-center rounded-xl bg-white px-4 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50' }, 'Export')
+            h('a', { href: key ? apiUrl(`export_jobs.php?key=${encodeURIComponent(key)}`) : '#', className: 'admin-export-button inline-flex h-11 items-center rounded-xl bg-white px-4 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50' }, h(Icon, { name: 'Download', size: 15 }), h('span', null, 'Export'))
           )
         ),
         h('div', { className: 'admin-tabs mt-4 flex flex-wrap gap-2' }, adminTabs.map(([name, label, icon]) =>
@@ -3944,41 +4585,43 @@
           h('p', { className: 'mt-1 text-xs font-semibold text-slate-500' }, 'Stop aman mengembalikan job processing ke antrian tanpa penalti retry. Requeue mengulang job dari awal.')
         ),
         h('div', { className: 'admin-table-scroll overflow-auto' },
-        h('table', { className: 'admin-job-table min-w-[1180px] w-full border-separate border-spacing-0 text-left text-sm' },
-          h('thead', { className: 'bg-slate-950 text-white' },
-            h('tr', null, ['ID', 'File', 'Wilayah', 'Status', 'Upload', 'Progress', 'BNBA/Fix', 'Hasil', 'Aksi'].map(col => h('th', { key: col, className: 'px-3 py-3 text-xs font-black uppercase' }, col)))
-          ),
-          h('tbody', null, jobs.length ? jobs.map(job => h('tr', { key: job.id, className: 'border-b border-slate-100 odd:bg-white even:bg-slate-50' },
-            h('td', { className: 'px-3 py-3' },
-              h('div', { className: 'grid gap-2' },
-                h('span', { className: 'font-black' }, `#${job.id}`),
-                jobShortUrl(job) ? h(CopyShortlinkButton, { url: jobShortUrl(job), compact: true, label: 'Link' }) : null
-              )
+          h('table', { className: 'admin-job-table min-w-[1180px] w-full border-separate border-spacing-0 text-left text-sm' },
+            h('thead', { className: 'bg-slate-950 text-white' },
+              h('tr', null, ['ID', 'File', 'Wilayah', 'Status', 'Upload', 'Progress', 'BNBA/Fix', 'Hasil', 'Aksi'].map(col => h('th', { key: col, className: 'px-3 py-3 text-xs font-black uppercase' }, col)))
             ),
-            h('td', { className: 'max-w-64 break-words px-3 py-3', title: job.original_filename }, job.original_filename),
-            h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600' }, [job.community_name, job.target_location, job.target_village, job.target_district, job.target_regency, job.target_province].filter(Boolean).join(', ') || '-'),
-            h('td', { className: 'px-3 py-3' }, h(Badge, { status: job.status }, job.status)),
-            h('td', { className: 'px-3 py-3 text-slate-500' }, formatDateTime(job.uploaded_at)),
-            h('td', { className: 'px-3 py-3 text-slate-600' }, `${compactNumber(job.rows_processed || 0)} / ${compactNumber(job.rows_total || 0)}`),
-            h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600' },
-              h('div', { className: 'grid gap-1' },
-                h('span', { className: 'font-black text-slate-950' }, `${fullNumber(job.bnba_summary?.kk_unique || 0)} KK unik`),
-                h('span', null, `${fullNumber(job.bnba_summary?.kk_duplicate || 0)} KK duplikat`),
-                job.fix_status ? h(Badge, { status: job.fix_status }, job.fix_status === 'approved' ? 'fix disetujui' : job.fix_status === 'pending' ? 'request fix' : job.fix_status) : (job.wants_fix ? h(Badge, { status: 'pending' }, 'request fix') : h(Badge, { status: 'slate' }, 'bukan fix'))
+            h('tbody', null, jobs.length ? jobs.map(job => h('tr', { key: job.id, className: 'border-b border-slate-100 odd:bg-white even:bg-slate-50' },
+              h('td', { className: 'px-3 py-3' },
+                h('div', { className: 'grid gap-2' },
+                  h('span', { className: 'font-black' }, `#${job.id}`),
+                  jobShortUrl(job) ? h(CopyShortlinkButton, { url: jobShortUrl(job), compact: true, label: '' }) : null
+                )
+              ),
+              h('td', { className: 'max-w-64 break-words px-3 py-3', title: job.original_filename }, job.original_filename),
+              h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600' }, [job.community_name, job.target_location, job.target_village, job.target_district, job.target_regency, job.target_province].filter(Boolean).join(', ') || '-'),
+              h('td', { className: 'px-3 py-3' }, h(Badge, { status: job.status }, job.status)),
+              h('td', { className: 'px-3 py-3 text-slate-500' }, formatDateTime(job.uploaded_at)),
+              h('td', { className: 'px-3 py-3 text-slate-600' }, `${compactNumber(job.rows_processed || 0)} / ${compactNumber(job.rows_total || 0)}`),
+              h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600' },
+                h('div', { className: 'flex items-center gap-3' },
+                  h('div', { className: 'min-w-0' },
+                    h('span', { className: 'font-black text-slate-950 block' }, `${fullNumber(job.bnba_summary?.kk_unique || 0)} KK unik`),
+                    h('span', { className: 'block text-slate-600' }, `${fullNumber(job.bnba_summary?.kk_duplicate || 0)} KK duplikat`)
+                  ),
+                  job.fix_status ? h(Badge, { status: job.fix_status }, job.fix_status === 'approved' ? 'fix disetujui' : job.fix_status === 'pending' ? 'request fix' : job.fix_status) : (job.wants_fix ? h(Badge, { status: 'pending' }, 'request fix') : h(Badge, { status: 'slate' }, 'bukan fix'))
+                )
+              ),
+              h('td', { className: 'px-3 py-3' }, h(ResultDownloadLinks, { job, adminKey })),
+              h('td', { className: 'px-3 py-3' },
+                h('div', { className: 'admin-action-row flex items-center gap-2 flex-nowrap whitespace-nowrap' },
+                  job.status === 'processing' ? h(Button, { type: 'button', variant: 'soft', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'stop') }, h(Icon, { name: 'OctagonPause', size: 14 }), busyJobs[job.id] ? '...' : 'Stop') : null,
+                  ['queued', 'processing'].includes(job.status) ? h(Button, { type: 'button', variant: 'danger', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'cancel') }, h(Icon, { name: 'Ban', size: 14 }), busyJobs[job.id] ? '...' : 'Cancel') : null,
+                  ['failed', 'cancelled', 'completed'].includes(job.status) ? h(Button, { type: 'button', variant: 'soft', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'requeue') }, h(Icon, { name: 'RefreshCcw', size: 14 }), busyJobs[job.id] ? '...' : 'Requeue') : null,
+                  job.dispute_status === 'submitted' ? h(Button, { type: 'button', variant: 'success', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'resolve_dispute') }, h(Icon, { name: 'BadgeCheck', size: 14 }), busyJobs[job.id] ? '...' : 'Resolve') : null
+                )
               )
-            ),
-            h('td', { className: 'px-3 py-3' }, h(ResultDownloadLinks, { job, adminKey })),
-            h('td', { className: 'px-3 py-3' },
-              h('div', { className: 'admin-action-row flex flex-wrap gap-2' },
-                job.status === 'processing' ? h(Button, { type: 'button', variant: 'soft', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'stop') }, h(Icon, { name: 'OctagonPause', size: 14 }), busyJobs[job.id] ? '...' : 'Stop') : null,
-                ['queued', 'processing'].includes(job.status) ? h(Button, { type: 'button', variant: 'danger', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'cancel') }, h(Icon, { name: 'Ban', size: 14 }), busyJobs[job.id] ? '...' : 'Cancel') : null,
-                ['failed', 'cancelled', 'completed'].includes(job.status) ? h(Button, { type: 'button', variant: 'soft', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'requeue') }, h(Icon, { name: 'RefreshCcw', size: 14 }), busyJobs[job.id] ? '...' : 'Requeue') : null,
-                job.dispute_status === 'submitted' ? h(Button, { type: 'button', variant: 'success', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'resolve_dispute') }, h(Icon, { name: 'BadgeCheck', size: 14 }), busyJobs[job.id] ? '...' : 'Resolve') : null
-              )
-            )
-          )) : h('tr', null, h('td', { colSpan: 9, className: 'px-4 py-10 text-center text-slate-500' }, 'Belum ada data job.')))
+            )) : h('tr', null, h('td', { colSpan: 9, className: 'px-4 py-10 text-center text-slate-500' }, 'Belum ada data job.')))
+          )
         )
-      )
       )
     );
   }
@@ -3986,24 +4629,311 @@
   function DistributionAdmin({ adminKey }) {
     const empty = { source_data: 'DATA PERSEBARAN KAT', data_year: new Date().getFullYear(), province: '', regency: '', district: '', village: '', location: '', tribe: '', households_spread: '', households_total: '', is_proposed: 1 };
     const [rows, setRows] = useState([]);
+
+    const existingSources = useMemo(() => {
+      const set = new Set([
+        'DATA PERSEBARAN KAT',
+        'PENGUSULAN TIM KERJA PERSIAPAN ASESMEN',
+        'SURAT PENGUSULAN DINAS SOSIAL',
+        'LAPORAN PERSEBARAN HASIL VERVAL',
+      ]);
+      if (Array.isArray(rows)) {
+        rows.forEach(r => {
+          if (r && r.source_data && String(r.source_data).trim()) {
+            set.add(String(r.source_data).trim());
+          }
+        });
+      }
+      return Array.from(set);
+    }, [rows]);
+
     const [form, setForm] = useState(empty);
     const [query, setQuery] = useState('');
     const [file, setFile] = useState(null);
     const [preview, setPreview] = useState(null);
     const [message, setMessage] = useState(null);
     const [loading, setLoading] = useState(false);
-    const qualitySummary = useMemo(() => {
-      const summary = { total: rows.length, withLocation: 0, needsReview: 0, clean: 0 };
-      rows.forEach(row => {
-        const hasDistrict = Boolean(String(row.district || '').trim());
-        const hasVillage = Boolean(String(row.village || '').trim());
-        const hasLocation = Boolean(String(row.location || '').trim());
-        const mergedVillage = /\b(kec\.?|kecamatan|kecamaran|distrik|dusun|lokasi)\b/i.test(String(row.village || ''));
-        const mergedLocation = /\b(kec\.?|kecamatan|kecamaran|distrik)\b/i.test(String(row.location || ''));
-        if (hasLocation) summary.withLocation += 1;
-        if (!hasDistrict || (!hasVillage && !hasLocation) || mergedVillage || mergedLocation) summary.needsReview += 1;
-        if (hasDistrict && (hasVillage || hasLocation) && !mergedVillage && !mergedLocation) summary.clean += 1;
+
+    const [pdfFile, setPdfFile] = useState(null);
+    const [pdfLoading, setPdfLoading] = useState(false);
+    const [pdfSubmitting, setPdfSubmitting] = useState(false);
+    const [pdfModalOpen, setPdfModalOpen] = useState(false);
+    const [pdfFilename, setPdfFilename] = useState('');
+    const [pdfConfirmRows, setPdfConfirmRows] = useState([]);
+
+    const [pdfProgressModalOpen, setPdfProgressModalOpen] = useState(false);
+    const [pdfProgressPercent, setPdfProgressPercent] = useState(0);
+    const [pdfStatusText, setPdfStatusText] = useState('Mengunggah PDF...');
+    const [pdfSecondsElapsed, setPdfSecondsElapsed] = useState(0);
+
+    const DRAFT_KEY = 'kat_pdf_distribution_draft';
+
+    function getPdfCacheKey(file) {
+      if (!file) return null;
+      return `kat_pdf_cache_${file.name.replace(/\s+/g, '_')}_${file.size}`;
+    }
+
+    const [hasLocalDraft, setHasLocalDraft] = useState(() => {
+      try { return Boolean(localStorage.getItem(DRAFT_KEY)); } catch (_) { return false; }
+    });
+
+    const [savedDraftInfo, setSavedDraftInfo] = useState(() => {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (_) { return null; }
+    });
+
+    async function extractPdfWithGemini(forceReExtract = false) {
+      if (!pdfFile) return setMessage({ type: 'error', text: 'Pilih file PDF terlebih dahulu.' });
+
+      // 1. SMART CACHE CHECK (MENGHEMAT TOKEN GEMINI AI)
+      if (!forceReExtract) {
+        const cacheKey = getPdfCacheKey(pdfFile);
+        let cachedPayload = null;
+
+        try {
+          const raw = localStorage.getItem(cacheKey);
+          if (raw) cachedPayload = JSON.parse(raw);
+        } catch (_) { }
+
+        // Fallback: check active local draft if filename matches
+        if (!cachedPayload && savedDraftInfo && savedDraftInfo.filename === pdfFile.name && savedDraftInfo.rows?.length) {
+          cachedPayload = {
+            filename: savedDraftInfo.filename,
+            records: savedDraftInfo.rows,
+            total_extracted: savedDraftInfo.rows.length,
+            fromDraft: true
+          };
+        }
+
+        if (cachedPayload && cachedPayload.records && cachedPayload.records.length > 0) {
+          setPdfFilename(cachedPayload.filename || pdfFile.name);
+          setPdfConfirmRows(cachedPayload.records);
+          setPdfModalOpen(true);
+          setMessage({
+            type: 'info',
+            text: `⚡ HEMAT TOKEN GEMINI AI! Menggunakan hasil ekstraksi dari cache/draft lokal (${cachedPayload.records.length} lokasi data) untuk "${pdfFile.name}".`
+          });
+          return;
+        }
+      }
+
+      // 2. PROSES EKSTRAKSI GEMINI AI (JIKA BELUM ADA DI CACHE)
+      setPdfLoading(true);
+      setPdfProgressPercent(5);
+      setPdfStatusText('Mengunggah file PDF ke server...');
+      setPdfSecondsElapsed(0);
+      setPdfProgressModalOpen(true);
+      setMessage(null);
+
+      let seconds = 0;
+      const timerInterval = setInterval(() => {
+        seconds += 1;
+        setPdfSecondsElapsed(seconds);
+
+        setPdfProgressPercent(current => {
+          if (current < 25) return current + 3;
+          if (current < 50) {
+            setPdfStatusText('Menghubungkan ke Google Gemini AI...');
+            return current + 2;
+          }
+          if (current < 75) {
+            setPdfStatusText('Gemini AI sedang membaca narasi & lokasi PDF...');
+            return current + 1;
+          }
+          if (current < 95) {
+            setPdfStatusText('Mengekstrak lokasi persebaran & normalisasi wilayah...');
+            return current + 0.5;
+          }
+          setPdfStatusText('Menyiapkan konfirmasi data...');
+          return Math.min(98, current + 0.2);
+        });
+      }, 400);
+
+      try {
+        const upload = new FormData();
+        upload.append('action', 'pdf_extract');
+        upload.append('admin_key', adminKey);
+        upload.append('file', pdfFile);
+
+        const data = await uploadFormWithProgress(apiUrl('distribution.php'), upload, uploadPercent => {
+          const mappedUploadPercent = Math.round((uploadPercent / 100) * 25);
+          setPdfProgressPercent(prev => Math.max(prev, mappedUploadPercent));
+          if (uploadPercent < 100) {
+            setPdfStatusText(`Mengunggah file PDF (${uploadPercent}%)...`);
+          } else {
+            setPdfStatusText('Upload selesai! Menghubungkan ke Gemini AI...');
+          }
+        });
+
+        clearInterval(timerInterval);
+        setPdfProgressPercent(100);
+        setPdfStatusText('Selesai!');
+
+        // OTOMATIS SIMPAN KE CACHE LOKAL AGAR HEMAT TOKEN GEMINI AI DI MASA DEPAN
+        try {
+          const cacheKey = getPdfCacheKey(pdfFile);
+          const cachePayload = {
+            filename: data.filename || pdfFile.name,
+            records: data.records || [],
+            total_extracted: data.total_extracted || 0,
+            savedAt: new Date().toISOString()
+          };
+          if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify(cachePayload));
+
+          const draftPayload = {
+            filename: data.filename || pdfFile.name,
+            batchSource: existingSources[0] || 'DATA PERSEBARAN KAT',
+            rows: data.records || [],
+            savedAt: new Date().toISOString()
+          };
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(draftPayload));
+          setHasLocalDraft(true);
+          setSavedDraftInfo(draftPayload);
+        } catch (_) { }
+
+        setTimeout(() => {
+          setPdfProgressModalOpen(false);
+          setPdfFilename(data.filename || pdfFile.name);
+          setPdfConfirmRows(data.records || []);
+          setPdfModalOpen(true);
+          setMessage({ type: 'info', text: `✓ Gemini AI berhasil mengekstrak ${compactNumber(data.total_extracted || 0)} lokasi dari PDF. Hasil disimpan di cache lokal agar hemat token!` });
+        }, 400);
+
+      } catch (error) {
+        clearInterval(timerInterval);
+        setPdfProgressModalOpen(false);
+        setMessage({ type: 'error', text: `Gagal mengekstrak PDF: ${error.message}` });
+      } finally {
+        setPdfLoading(false);
+      }
+    }
+
+    function updatePdfRowField(index, field, value) {
+      setPdfConfirmRows(current => {
+        const next = [...(current || [])];
+        next[index] = { ...next[index], [field]: value };
+        return next;
       });
+    }
+
+    function saveDraftToLocalStorage(currentBatchSource) {
+      if (!pdfConfirmRows.length) return;
+      const draftPayload = {
+        filename: pdfFilename || 'Dokumen Draft',
+        batchSource: currentBatchSource || existingSources[0] || 'DATA PERSEBARAN KAT',
+        rows: pdfConfirmRows,
+        savedAt: new Date().toISOString()
+      };
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draftPayload));
+        setHasLocalDraft(true);
+        setSavedDraftInfo(draftPayload);
+        setMessage({ type: 'info', text: `✓ Draft lokal berhasil disimpan (${pdfConfirmRows.length} lokasi data) di browser Anda!` });
+      } catch (err) {
+        setMessage({ type: 'error', text: 'Gagal menyimpan draft ke browser localStorage.' });
+      }
+    }
+
+    function restoreDraftFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return;
+        const payload = JSON.parse(raw);
+        setPdfFilename(payload.filename || 'Draft Tersimpan');
+        setPdfConfirmRows(payload.rows || []);
+        setPdfModalOpen(true);
+        setMessage({ type: 'info', text: `Berhasil memuat draft tersimpan lokal dari browser (${payload.rows?.length || 0} lokasi).` });
+      } catch (err) {
+        setMessage({ type: 'error', text: 'Gagal membaca draft lokal.' });
+      }
+    }
+
+    function clearDraftFromLocalStorage() {
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+        setHasLocalDraft(false);
+        setSavedDraftInfo(null);
+        setMessage({ type: 'info', text: 'Draft lokal berhasil dihapus.' });
+      } catch (_) { }
+    }
+
+    function addPdfRow() {
+      const defaultSource = existingSources?.[0] || 'DATA PERSEBARAN KAT';
+      setPdfConfirmRows(current => [
+        ...current,
+        {
+          source_data: defaultSource,
+          data_year: new Date().getFullYear(),
+          province: '',
+          regency: '',
+          district: '',
+          village: '',
+          location: '',
+          tribe: '',
+          households_spread: '',
+          households_total: '',
+          is_proposed: 1,
+          notes: '',
+        }
+      ]);
+    }
+
+    function applyBatchSourceToPdfRows(sourceValue) {
+      setPdfConfirmRows(current => current.map(r => ({ ...r, source_data: sourceValue })));
+    }
+
+    function removePdfRow(index) {
+      setPdfConfirmRows(current => current.filter((_, i) => i !== index));
+    }
+
+    async function submitPdfConfirmedRows() {
+      if (!pdfConfirmRows.length) {
+        return setMessage({ type: 'error', text: 'Tidak ada baris data untuk disimpan.' });
+      }
+      const validRows = pdfConfirmRows.filter(r => String(r.province || '').trim());
+      if (!validRows.length) {
+        return setMessage({ type: 'error', text: 'Setidaknya satu lokasi harus mengisi nama Provinsi.' });
+      }
+
+      setPdfSubmitting(true);
+      try {
+        const data = await apiRequest('distribution.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+          body: JSON.stringify({ action: 'pdf_commit', records: pdfConfirmRows })
+        });
+        try {
+          localStorage.removeItem(DRAFT_KEY);
+          setHasLocalDraft(false);
+          setSavedDraftInfo(null);
+        } catch (_) { }
+        setPdfModalOpen(false);
+        setPdfConfirmRows([]);
+        setPdfFile(null);
+        setMessage({ type: 'info', text: `Berhasil menambahkan ${compactNumber(data.inserted || 0)} lokasi persebaran dari PDF!` });
+        await loadRows();
+      } catch (error) {
+        setMessage({ type: 'error', text: error.message });
+      } finally {
+        setPdfSubmitting(false);
+      }
+    }
+    const qualitySummary = useMemo(() => {
+      const summary = { total: Array.isArray(rows) ? rows.length : 0, withLocation: 0, needsReview: 0, clean: 0 };
+      if (Array.isArray(rows)) {
+        rows.forEach(row => {
+          const hasDistrict = Boolean(String(row?.district || '').trim());
+          const hasVillage = Boolean(String(row?.village || '').trim());
+          const hasLocation = Boolean(String(row?.location || '').trim());
+          const mergedVillage = /\b(kec\.?|kecamatan|kecamaran|distrik|dusun|lokasi)\b/i.test(String(row?.village || ''));
+          const mergedLocation = /\b(kec\.?|kecamatan|kecamaran|distrik)\b/i.test(String(row?.location || ''));
+          if (hasLocation) summary.withLocation += 1;
+          if (!hasDistrict || (!hasVillage && !hasLocation) || mergedVillage || mergedLocation) summary.needsReview += 1;
+          if (hasDistrict && (hasVillage || hasLocation) && !mergedVillage && !mergedLocation) summary.clean += 1;
+        });
+      }
       return summary;
     }, [rows]);
 
@@ -4123,7 +5053,131 @@
               hint: 'Drop XLSX, CSV, XML, atau TXT untuk dicek duplikat sebelum ditambahkan.',
             }),
             h(Button, { type: 'button', variant: 'soft', disabled: loading || !file || !adminKey, onClick: importPreview }, 'Preview import'),
-        preview ? h(Button, { type: 'button', variant: 'blue', disabled: loading, onClick: importCommit }, `Tambahkan ${compactNumber(preview.new_count)} baris`) : null
+            preview ? h(Button, { type: 'button', variant: 'blue', disabled: loading, onClick: importCommit }, `Tambahkan ${compactNumber(preview.new_count)} baris`) : null
+          )
+        ),
+        h('div', { className: 'pdf-import-container' },
+          h('div', { className: 'pdf-import-header-row' },
+            h('div', { className: 'pdf-import-badge-icon' }, h(Icon, { name: 'Sparkles', size: 20 })),
+            h('div', { className: 'pdf-import-header-texts' },
+              h('h3', { className: 'pdf-import-main-title' }, 'Import PDF via Gemini AI'),
+              h('span', { className: 'pdf-import-sub-badge' }, 'Ekstraksi Otomatis')
+            )
+          ),
+          h('p', { className: 'pdf-import-description' }, 'Unggah file PDF (Surat Dinas, Pengusulan, atau Laporan). Gemini AI akan membaca lokasi persebaran KAT dan menampilkan konfirmasi & edit sebelum disimpan.'),
+
+          hasLocalDraft && savedDraftInfo ? h('div', { className: 'pdf-local-draft-card' },
+            h('div', { className: 'pdf-draft-header' },
+              h('div', { className: 'pdf-draft-icon-box' }, h(Icon, { name: 'Bookmark', size: 16 })),
+              h('div', { className: 'pdf-draft-text-group' },
+                h('span', { className: 'pdf-draft-title-line' }, `Draft Tersimpan (${savedDraftInfo?.rows?.length || 0} lokasi)`),
+                h('span', { className: 'pdf-draft-meta-line' }, `${savedDraftInfo?.filename || 'PDF'} • ${savedDraftInfo?.savedAt ? new Date(savedDraftInfo.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`)
+              )
+            ),
+            h('div', { className: 'pdf-draft-action-row' },
+              h('button', {
+                type: 'button',
+                onClick: restoreDraftFromLocalStorage,
+                className: 'btn-open-draft-action',
+                style: {
+                  flex: '1 1 0',
+                  height: '2.75rem',
+                  borderRadius: '0.85rem',
+                  backgroundColor: '#d97706',
+                  background: '#d97706',
+                  color: '#ffffff',
+                  fontSize: '0.82rem',
+                  fontWeight: 900,
+                  border: '1.5px solid #b45309',
+                  boxShadow: '0 4px 12px rgba(217, 119, 6, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  cursor: 'pointer'
+                }
+              },
+                h(Icon, { name: 'FolderOpen', size: 16, style: { stroke: '#ffffff', color: '#ffffff' } }),
+                h('span', { style: { color: '#ffffff', fontWeight: 900, fontSize: '0.82rem' } }, 'Buka Draft')
+              ),
+              h('button', {
+                type: 'button',
+                onClick: clearDraftFromLocalStorage,
+                className: 'btn-delete-draft-action',
+                style: {
+                  height: '2.75rem',
+                  padding: '0 1.15rem',
+                  borderRadius: '0.85rem',
+                  backgroundColor: '#ffffff',
+                  background: '#ffffff',
+                  color: '#78350f',
+                  fontSize: '0.82rem',
+                  fontWeight: 900,
+                  border: '1.5px solid #fcd34d',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }
+              }, h('span', { style: { color: '#78350f', fontWeight: 900 } }, 'Hapus'))
+            )
+          ) : null,
+
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: '0.85rem' } },
+            h(FileDropzone, {
+              file: pdfFile,
+              onFile: setPdfFile,
+              accept: '.pdf',
+              compact: true,
+              hint: 'Drop file PDF laporan atau lokasi persebaran.',
+            }),
+            h('button', {
+              type: 'button',
+              disabled: loading || pdfLoading || !pdfFile || !adminKey,
+              onClick: extractPdfWithGemini,
+              className: 'btn-gemini-extract-action',
+              style: (loading || pdfLoading || !pdfFile || !adminKey) ? {
+                width: '100%',
+                height: '3rem',
+                borderRadius: '0.9rem',
+                backgroundColor: '#f1f5f9',
+                background: '#f1f5f9',
+                color: '#0f172a',
+                fontSize: '0.82rem',
+                fontWeight: 900,
+                border: '2px solid #94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                cursor: 'not-allowed',
+                boxShadow: 'none'
+              } : {
+                width: '100%',
+                height: '3rem',
+                borderRadius: '0.9rem',
+                background: 'linear-gradient(135deg, #6d28d9 0%, #4f46e5 100%)',
+                color: '#ffffff',
+                fontSize: '0.82rem',
+                fontWeight: 900,
+                border: '1.5px solid #5b21b6',
+                boxShadow: '0 6px 18px rgba(109, 40, 217, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                cursor: 'pointer'
+              }
+            },
+              h(Icon, {
+                name: 'Sparkles',
+                size: 16,
+                style: (loading || pdfLoading || !pdfFile || !adminKey) ? { stroke: '#0f172a', color: '#0f172a' } : { stroke: '#ffffff', color: '#ffffff' }
+              }),
+              h('span', {
+                style: (loading || pdfLoading || !pdfFile || !adminKey) ? { color: '#0f172a', fontWeight: 900 } : { color: '#ffffff', fontWeight: 900 }
+              }, pdfLoading ? 'Gemini sedang membaca PDF...' : '⚡ Ekstrak PDF dengan Gemini AI')
+            )
           )
         ),
         h('div', { className: 'mt-4' }, h(Notice, { message }))
@@ -4168,7 +5222,7 @@
           h(PreviewTable, { rows: preview.preview_rows || [], maxHeight: 300 })
         ) : null,
         h('div', { className: 'distribution-record-list mt-4' },
-          rows.length ? rows.map(row => h('article', { key: row.id, className: 'distribution-record-card' },
+          (Array.isArray(rows) && rows.length) ? rows.map(row => h('article', { key: row.id, className: 'distribution-record-card' },
             h('div', { className: 'distribution-record-main' },
               h('span', { className: 'distribution-record-icon' }, h(Icon, { name: row.location ? 'MapPin' : 'MapPinned', size: 17 })),
               h('div', { className: 'min-w-0' },
@@ -4198,7 +5252,29 @@
             )
           )) : h('div', { className: 'rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500' }, 'Muat data untuk mulai.')
         )
-      )
+      ),
+      h(PdfConfirmationModal, {
+        isOpen: pdfModalOpen,
+        filename: pdfFilename,
+        rows: pdfConfirmRows,
+        existingSources: existingSources,
+        existingDbRows: rows,
+        onUpdateField: updatePdfRowField,
+        onApplyBatchSource: applyBatchSourceToPdfRows,
+        onAddRow: addPdfRow,
+        onRemoveRow: removePdfRow,
+        onSaveDraft: saveDraftToLocalStorage,
+        onSubmit: submitPdfConfirmedRows,
+        onClose: () => setPdfModalOpen(false),
+        submitting: pdfSubmitting,
+      }),
+      h(PdfProcessingProgressModal, {
+        isOpen: pdfProgressModalOpen,
+        filename: pdfFile?.name,
+        progressPercent: pdfProgressPercent,
+        statusText: pdfStatusText,
+        secondsElapsed: pdfSecondsElapsed,
+      })
     );
   }
 
@@ -4910,10 +5986,10 @@
     const storeDescription = storeMode === 'supabase'
       ? 'CRUD aktif memakai Supabase. Pilihan database runtime dan akun Google Drive juga persisten untuk fungsi serverless.'
       : storeMode === 'sheets'
-      ? 'CRUD portable memakai satu workbook Google Sheets untuk seluruh tab operasional. Persebaran dapat memakai workbook publik terpisah.'
-      : storeMode === 'json'
-        ? 'CRUD portable sedang memakai satu snapshot Big JSON di storage lokal.'
-        : 'MySQL masih menjadi sumber aktif. Dari panel ini data dapat disalin ke Big JSON atau Google Sheets sebelum mode dipindahkan.';
+        ? 'CRUD portable memakai satu workbook Google Sheets untuk seluruh tab operasional. Persebaran dapat memakai workbook publik terpisah.'
+        : storeMode === 'json'
+          ? 'CRUD portable sedang memakai satu snapshot Big JSON di storage lokal.'
+          : 'MySQL masih menjadi sumber aktif. Dari panel ini data dapat disalin ke Big JSON atau Google Sheets sebelum mode dipindahkan.';
     const configuredSheets = Object.values(store.tables || {}).filter(table => table?.spreadsheet_id).length;
 
     return h('section', { className: 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]' },
@@ -5533,7 +6609,7 @@
           if (data.config) publicRuntimeConfig = data.config;
           if (live && data.config) setAppConfig(data.config);
         })
-        .catch(() => {});
+        .catch(() => { });
       return () => { live = false; };
     }, []);
 
