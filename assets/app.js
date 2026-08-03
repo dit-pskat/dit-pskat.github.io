@@ -17,6 +17,17 @@
   ];
   const DEFAULT_ABOUT_TITLE = 'Tentang Project CPNS Padan Data KAT';
   const DEFAULT_ABOUT_SUMMARY = 'Ruang kerja untuk membaca persebaran KAT, memadankan BNBA, dan menjaga arsip operasional agar mudah dipakai ulang.';
+  const DISTRIBUTION_DOCUMENT_FIELDS = [
+    ['doc_surat_usulan_kadis', 'Surat Usulan Kadis', 'FileText'],
+    ['doc_rekomendasi_bupati', 'Rekomendasi Bupati', 'BadgeCheck'],
+    ['doc_pemetaan_sosial', 'Hasil Pemetaan Sosial', 'Map'],
+    ['doc_bnba_pusdatin', 'BNBA Format Pusdatin', 'FileSpreadsheet'],
+    ['doc_status_lahan', 'Status Lahan Clean & Clear', 'LandPlot'],
+    ['doc_instrumen_skoring_pa', 'Instrumen Skoring PA', 'ClipboardCheck'],
+    ['doc_laporan_studi_kelayakan', 'Laporan Studi Kelayakan', 'NotebookTabs'],
+    ['doc_bnba_clear_padan', 'BNBA Clear Padan', 'TableProperties'],
+    ['doc_ktp_kk_kpm', 'KTP dan KK Calon KPM', 'ContactRound'],
+  ];
   const DEFAULT_ABOUT_HTML = `
     <h2>Project CPNS untuk kerja data KAT yang lebih tertata</h2>
     <p>Platform ini disiapkan sebagai ruang kerja operasional untuk membaca persebaran Komunitas Adat Terpencil, melakukan padan data BNBA, memantau hasil pengecekan, dan menyimpan arsip tautan kerja yang sudah dikurasi.</p>
@@ -379,8 +390,28 @@
     return Number(publicRuntimeConfig.upload_request_timeout_ms || window.APP_CONFIG?.uploadRequestTimeoutMs || 120000);
   }
 
+  function invalidApiPayloadMessage(raw, status, context = 'API') {
+    const body = String(raw || '').trim();
+    if (body.startsWith('<?php')) {
+      return `${context} menerima source code PHP (${status}). Backend sedang disajikan oleh server statis; jalankan melalui PHP/hosting backend atau arahkan apiBase ke backend aktif.`;
+    }
+    if (/^<!doctype html|^<html/i.test(body)) {
+      return `${context} menerima halaman HTML, bukan JSON (${status}). Periksa apiBase dan konfigurasi rewrite backend.`;
+    }
+    return `${context} tidak mengembalikan JSON valid (${status}).`;
+  }
+
   async function parseJsonResponse(response) {
-    const data = await response.json().catch(() => null);
+    const raw = await response.text().catch(() => '');
+    let data = null;
+    try {
+      data = JSON.parse(raw);
+    } catch (_) {
+      const error = new Error(invalidApiPayloadMessage(raw, response.status));
+      error.status = response.status;
+      error.data = {};
+      throw error;
+    }
     if (!response.ok || !data?.ok) {
       const error = new Error(errorMessage(data, response.status));
       error.status = response.status;
@@ -442,7 +473,7 @@
         try {
           data = JSON.parse(xhr.responseText || 'null');
         } catch (_) {
-          reject(new Error(`Response upload tidak valid (${xhr.status}).`));
+          reject(new Error(invalidApiPayloadMessage(xhr.responseText, xhr.status, 'Upload')));
           return;
         }
         if (xhr.status < 200 || xhr.status >= 300 || !data?.ok) {
@@ -1904,6 +1935,180 @@
     );
   }
 
+  function KatProposalModal({ isOpen, onClose, onSuccess }) {
+    if (!isOpen) return null;
+
+    const [form, setForm] = useState({
+      submitted_by_name: '',
+      submitted_by_email: '',
+      source_data: 'PENGUSULAN MASYARAKAT',
+      data_year: new Date().getFullYear(),
+      province: '',
+      regency: '',
+      district: '',
+      village: '',
+      location: '',
+      tribe: '',
+      households_spread: '',
+      households_total: '',
+      notes: '',
+    });
+    const [file, setFile] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [errorMsg, setErrorMsg] = useState(null);
+    const [successMsg, setSuccessMsg] = useState(null);
+
+    function setField(key, val) {
+      setForm(prev => ({ ...prev, [key]: val }));
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      if (!form.province) {
+        setErrorMsg('Provinsi wajib diisi.');
+        return;
+      }
+      if (!form.tribe && !form.location) {
+        setErrorMsg('Suku/Komunitas atau Dusun/Lokasi wajib diisi.');
+        return;
+      }
+
+      setSubmitting(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+
+      try {
+        const formData = new FormData();
+        Object.entries(form).forEach(([k, v]) => formData.append(k, v || ''));
+        if (file) {
+          formData.append('file', file);
+        }
+
+        const res = await fetch(freshApiUrl('distribution_proposals.php'), {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.message || 'Gagal mengirim usulan.');
+        }
+
+        setSuccessMsg(data.message || 'Usulan Anda berhasil dikirim!');
+        setTimeout(() => {
+          if (typeof onSuccess === 'function') onSuccess();
+          onClose();
+        }, 2200);
+      } catch (err) {
+        setErrorMsg(err.message || 'Terjadi kesalahan jaringan.');
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    return h('div', { className: 'fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md overflow-y-auto' },
+      h('div', { className: 'relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-8' },
+        h('div', { className: 'flex items-center justify-between p-6 bg-gradient-to-r from-purple-900 to-indigo-900 text-white' },
+          h('div', { className: 'flex items-center gap-3.5' },
+            h('div', { className: 'grid place-items-center w-11 h-11 rounded-2xl bg-white/10 text-purple-200 border border-white/15' }, h(Icon, { name: 'FilePlus', size: 24 })),
+            h('div', null,
+              h('h3', { className: 'text-lg font-black text-white m-0' }, 'Form Pengusulan Data KAT Publik'),
+              h('p', { className: 'text-xs text-purple-200 m-0 mt-0.5' }, 'Usulkan lokasi baru Komunitas Adat Terpencil untuk ditinjau Admin')
+            )
+          ),
+          h('button', {
+            type: 'button',
+            onClick: onClose,
+            className: 'grid place-items-center w-9 h-9 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all border border-white/10',
+            title: 'Tutup formulir',
+            'aria-label': 'Tutup formulir',
+          }, h(Icon, { name: 'X', size: 18 }))
+        ),
+        h('form', { onSubmit: handleSubmit, className: 'p-6 space-y-4 max-h-[75vh] overflow-y-auto' },
+          errorMsg && h('div', { className: 'p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2' }, h(Icon, { name: 'AlertCircle', size: 16 }), errorMsg),
+          successMsg && h('div', { className: 'p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2' }, h(Icon, { name: 'CheckCircle2', size: 16 }), successMsg),
+
+          h('div', { className: 'p-4 rounded-2xl bg-purple-50/60 border border-purple-100 space-y-3' },
+            h('h4', { className: 'text-xs font-black text-purple-950 uppercase tracking-wider' }, '1. Identitas Pengusul'),
+            h('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Nama Lengkap / Instansi'),
+                h('input', { type: 'text', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.submitted_by_name, onChange: e => setField('submitted_by_name', e.target.value), placeholder: 'misal: Dinas Sosial Kab. X / Andi' })
+              ),
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Email Kontak'),
+                h('input', { type: 'email', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.submitted_by_email, onChange: e => setField('submitted_by_email', e.target.value), placeholder: 'nama@email.com' })
+              )
+            )
+          ),
+
+          h('div', { className: 'p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3' },
+            h('h4', { className: 'text-xs font-black text-slate-900 uppercase tracking-wider' }, '2. Detail Lokasi KAT'),
+            h('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Suku / Komunitas KAT (*)'),
+                h('input', { type: 'text', required: true, className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.tribe, onChange: e => setField('tribe', e.target.value), placeholder: 'misal: Suku Dayak / Suku Anak Dalam' })
+              ),
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Provinsi (*)'),
+                h('input', { type: 'text', required: true, className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.province, onChange: e => setField('province', e.target.value), placeholder: 'misal: Kalimantan Timur' })
+              ),
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Kabupaten / Kota'),
+                h('input', { type: 'text', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.regency, onChange: e => setField('regency', e.target.value), placeholder: 'Kabupaten X' })
+              ),
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Kecamatan / Distrik'),
+                h('input', { type: 'text', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.district, onChange: e => setField('district', e.target.value), placeholder: 'Kecamatan Y' })
+              ),
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Desa / Kelurahan'),
+                h('input', { type: 'text', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.village, onChange: e => setField('village', e.target.value), placeholder: 'Desa Z' })
+              ),
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Dusun / Lokasi Spesifik'),
+                h('input', { type: 'text', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.location, onChange: e => setField('location', e.target.value), placeholder: 'Dusun Hutan X' })
+              )
+            )
+          ),
+
+          h('div', { className: 'p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3' },
+            h('h4', { className: 'text-xs font-black text-slate-900 uppercase tracking-wider' }, '3. Data Pendukung & Lampiran Dokumen'),
+            h('div', { className: 'grid grid-cols-1 sm:grid-cols-3 gap-3' },
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'KK Persebaran'),
+                h('input', { type: 'number', min: '0', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.households_spread, onChange: e => setField('households_spread', e.target.value), placeholder: '0' })
+              ),
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Total KK Komunitas'),
+                h('input', { type: 'number', min: '0', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.households_total, onChange: e => setField('households_total', e.target.value), placeholder: '0' })
+              ),
+              h('div', null,
+                h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Tahun Data'),
+                h('input', { type: 'number', className: 'w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.data_year, onChange: e => setField('data_year', e.target.value) })
+              )
+            ),
+            h('div', null,
+              h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Lampiran Dokumen Bukti (PDF / Excel / Foto)'),
+              h('input', { type: 'file', accept: '.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png', onChange: e => setFile(e.target.files?.[0] || null), className: 'block w-full text-xs font-bold text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 cursor-pointer' })
+            ),
+            h('div', null,
+              h('label', { className: 'block text-xs font-bold text-slate-700 mb-1' }, 'Catatan Tambahan / Alasan Pengusulan'),
+              h('textarea', { rows: 2, className: 'w-full p-3 text-xs font-bold rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-purple-500 outline-none', value: form.notes, onChange: e => setField('notes', e.target.value), placeholder: 'Penjelasan singkat lokasi atau nomor surat pengusulan...' })
+            )
+          ),
+
+          h('div', { className: 'flex items-center justify-end gap-3 pt-3 border-t border-slate-100' },
+            h('button', { type: 'button', onClick: onClose, className: 'h-11 px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all' }, 'Batal'),
+            h('button', { type: 'submit', disabled: submitting, className: 'h-11 px-6 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 text-white text-xs font-black shadow-md hover:shadow-lg transition-all flex items-center gap-2' },
+              h(Icon, { name: 'Send', size: 16 }),
+              submitting ? 'Mengirim Usulan...' : 'Kirim Usulan'
+            )
+          )
+        )
+      )
+    );
+  }
+
   function PreviewTable({ rows, maxHeight = 420 }) {
     const columns = useMemo(() => {
       if (!rows?.length) return [];
@@ -1998,11 +2203,11 @@
     }));
   }
 
-  function ResultDownloadLinks({ job, adminKey = '' }) {
+  function ResultDownloadLinks({ job, adminKey = '', compact = false }) {
     const options = Array.isArray(job?.result_downloads) ? job.result_downloads : [];
     if (!options.length) return null;
     const iconMap = { zip: 'Package', xlsx: 'Sheet', csv: 'Table', txt: 'FileText', json: 'Braces', jsonl: 'Braces' };
-    return h('div', { className: 'result-download-list' }, options.map(option => {
+    return h('div', { className: cx('result-download-list', compact && 'is-compact') }, options.map(option => {
       const href = resultDownloadUrl(job, option.file || 'package', adminKey);
       const filename = option.filename || option.file || 'hasil';
       const extension = String(option.extension || filename.split('.').pop() || '').toLowerCase();
@@ -2105,10 +2310,14 @@
   function BasicExcelSummary({ summary }) {
     if (!summary) return null;
     const notes = Array.isArray(summary.notes) ? summary.notes.filter(Boolean) : [];
+    const peopleTotal = Number(summary.people_total || 0);
+    const nikFilled = Number(summary.nik_filled || 0);
+    const kkFilled = Number(summary.kk_number_filled || 0);
+    const kkValidUnique = Number(summary.kk_number_valid_unique ?? summary.kk_number_unique ?? 0);
     const sourceLine = [
       summary.households_excel_source ? `Sumber KK Excel: ${summary.households_excel_source}` : '',
+      summary.nik_column ? `Kolom NIK: ${summary.nik_column}` : '',
       summary.kk_number_column ? `Kolom No KK: ${summary.kk_number_column}` : '',
-      summary.people_unique_source ? `Jiwa unik: ${summary.people_unique_source}` : '',
     ].filter(Boolean).join(' · ');
     return h('div', { className: 'rounded-2xl border border-sky-100 bg-sky-50/70 p-4' },
       h('div', { className: 'flex flex-col gap-2 md:flex-row md:items-start md:justify-between' },
@@ -2121,12 +2330,17 @@
           'Ikut dicatat di hasil'
         )
       ),
-      h('div', { className: 'mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5' },
-        h(MiniMetric, { icon: 'House', label: 'KK Excel', value: fullNumber(summary.households_excel_total || 0) }),
-        h(MiniMetric, { icon: 'CopyCheck', label: 'KK unik No KK', value: fullNumber(summary.kk_number_unique || 0) }),
-        h(MiniMetric, { icon: 'Users', label: 'Jiwa terbaca', value: fullNumber(summary.people_total || 0) }),
-        h(MiniMetric, { icon: 'Fingerprint', label: 'Jiwa unik', value: fullNumber(summary.people_unique || 0) }),
+      h('div', { className: 'mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6' },
+        h(MiniMetric, { icon: 'Users', label: 'Baris warga', value: fullNumber(peopleTotal) }),
+        h(MiniMetric, { icon: 'Fingerprint', label: 'NIK terisi', value: `${fullNumber(nikFilled)} / ${fullNumber(peopleTotal)}` }),
+        h(MiniMetric, { icon: 'CreditCard', label: 'Nomor KK terisi', value: `${fullNumber(kkFilled)} / ${fullNumber(peopleTotal)}` }),
+        h(MiniMetric, { icon: 'CopyCheck', label: 'Nomor KK unik', value: fullNumber(summary.kk_number_unique || 0) }),
+        h(MiniMetric, { icon: 'House', label: 'Estimasi keluarga', value: fullNumber(summary.households_excel_total || 0) }),
         h(MiniMetric, { icon: 'TriangleAlert', label: 'Perlu cek awal', value: fullNumber(summary.problem_rows || 0) })
+      ),
+      h('p', { className: 'mt-3 text-xs font-semibold text-slate-600' },
+        `${fullNumber(summary.nik_valid_unique || 0)} NIK valid unik. ${fullNumber(kkValidUnique)} Nomor KK valid unik. `,
+        `${fullNumber(summary.people_with_nik_and_kk || 0)} warga memiliki NIK dan KK terisi; ${fullNumber(summary.people_missing_both || 0)} warga tidak memiliki keduanya.`
       ),
       notes.length ? h('div', { className: 'mt-3 flex flex-wrap gap-2' }, notes.slice(0, 5).map((note, idx) =>
         h('span', { key: `${idx}-${note}`, className: 'rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200' }, note)
@@ -2171,6 +2385,93 @@
     };
   }
 
+  function distributionDocumentSummary(record = {}) {
+    const apiItems = Array.isArray(record.documents) ? record.documents : [];
+    const apiByKey = new Map(apiItems.map(item => [item.key, item]));
+    const items = DISTRIBUTION_DOCUMENT_FIELDS.map(([key, label, icon]) => {
+      const apiItem = apiByKey.get(key) || {};
+      const urlKey = `${key}_url`;
+      return {
+        key,
+        label,
+        icon,
+        checked: Object.prototype.hasOwnProperty.call(record, key) ? Boolean(Number(record[key] || 0)) : Boolean(apiItem.checked),
+        url: Object.prototype.hasOwnProperty.call(record, urlKey) ? (record[urlKey] || '') : (apiItem.url || ''),
+      };
+    });
+    return {
+      items,
+      complete: items.filter(item => item.checked).length,
+      linked: items.filter(item => item.url).length,
+      total: items.length,
+      folderUrl: record.documents_folder_url || '',
+      updatedAt: record.documents_updated_at || '',
+    };
+  }
+
+  function distributionRecordFromMapItem(item = {}) {
+    const record = { ...item };
+    const summary = distributionDocumentSummary(item);
+    summary.items.forEach(document => {
+      record[document.key] = document.checked ? 1 : 0;
+      record[`${document.key}_url`] = document.url || '';
+    });
+    record.documents_folder_url = summary.folderUrl || '';
+    return record;
+  }
+
+  function DistributionDocumentChecklist({ value = {}, onChange = null, editable = false }) {
+    const summary = distributionDocumentSummary(value);
+    const setValue = (key, nextValue) => onChange?.(key, nextValue);
+    return h('section', { className: cx('distribution-document-checklist', editable && 'is-editable') },
+      h('div', { className: 'distribution-document-head' },
+        h('div', { className: 'min-w-0' },
+          h('p', { className: 'distribution-document-kicker' }, h(Icon, { name: 'FolderCheck', size: 14 }), 'Kelengkapan dokumen usulan'),
+          h('strong', null, `${summary.complete} dari ${summary.total} lengkap`),
+          h('small', null, `${summary.linked} item memiliki tautan bukti`)
+        ),
+        h('span', { className: cx('distribution-document-score', summary.complete === summary.total && 'is-complete') }, `${summary.complete}/${summary.total}`)
+      ),
+      editable ? h(Field, { label: 'Link folder dokumen kabupaten/lokasi' },
+        h(TextInput, {
+          value: summary.folderUrl,
+          type: 'url',
+          placeholder: 'https://drive.google.com/drive/folders/...',
+          onChange: event => setValue('documents_folder_url', event.target.value),
+        })
+      ) : summary.folderUrl ? h('a', { className: 'distribution-document-folder', href: summary.folderUrl, target: '_blank', rel: 'noopener noreferrer' },
+        h(Icon, { name: 'FolderOpen', size: 15 }),
+        'Buka folder dokumen'
+      ) : null,
+      h('div', { className: 'distribution-document-items' },
+        summary.items.map(item => h('div', { key: item.key, className: cx('distribution-document-item', item.checked && 'is-checked') },
+          h('label', { className: 'distribution-document-toggle' },
+            h('input', {
+              type: 'checkbox',
+              checked: item.checked,
+              disabled: !editable,
+              onChange: event => setValue(item.key, event.target.checked ? 1 : 0),
+            }),
+            h('span', { className: 'distribution-document-icon' }, h(Icon, { name: item.icon, size: 15 })),
+            h('span', null, item.label)
+          ),
+          editable ? h('input', {
+            className: 'distribution-document-url',
+            type: 'url',
+            value: item.url,
+            placeholder: 'Tempel link dokumen',
+            'aria-label': `Link ${item.label}`,
+            onChange: event => setValue(`${item.key}_url`, event.target.value),
+          }) : item.url ? h('a', { className: 'distribution-document-open', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: `Buka ${item.label}` },
+            h(Icon, { name: 'ExternalLink', size: 14 }),
+            'Buka'
+          ) : h('span', { className: 'distribution-document-no-link' }, 'Belum ada link')
+        ))
+      ),
+      summary.updatedAt ? h('p', { className: 'distribution-document-updated' }, `Diperbarui ${formatDateTime(summary.updatedAt)}`) : null
+    );
+  }
+
   function LocationField({ icon, label, value }) {
     return h('div', { className: 'location-field rounded-xl bg-white/85 p-3 ring-1 ring-slate-100' },
       h('div', { className: 'flex items-center gap-2 text-slate-500' },
@@ -2181,11 +2482,68 @@
     );
   }
 
-  function LocationDetailPanel({ item, onClose, onStartPadan }) {
+  function LocationDetailPanel({ item, onClose, onStartPadan, onDocumentsSaved }) {
+    const [documentDraft, setDocumentDraft] = useState(() => distributionRecordFromMapItem(item || {}));
+    const [documentsEditing, setDocumentsEditing] = useState(false);
+    const [documentsSaving, setDocumentsSaving] = useState(false);
+    const [documentsMessage, setDocumentsMessage] = useState(null);
+    useEffect(() => {
+      setDocumentDraft(distributionRecordFromMapItem(item || {}));
+    }, [item?.distribution_id, item?.documents_updated_at]);
+    useEffect(() => {
+      setDocumentsEditing(false);
+      setDocumentsMessage(null);
+    }, [item?.distribution_id]);
     if (!item) return null;
     const bnba = item.bnba_summary || {};
     const hasBnba = Boolean(bnba.has_bnba || Number(bnba.kk_unique || 0) > 0 || Number(bnba.checked_rows || 0) > 0);
     const households = householdMetrics(item);
+    const adminKey = localStorage.getItem('admin_key') || '';
+    const canEditDocuments = Boolean(adminKey && Number(item.distribution_id || 0) > 0);
+    const setDocumentValue = (key, value) => setDocumentDraft(current => ({ ...current, [key]: value }));
+    const cancelDocumentEdit = () => {
+      setDocumentDraft(distributionRecordFromMapItem(item));
+      setDocumentsEditing(false);
+      setDocumentsMessage(null);
+    };
+    const saveDocuments = async () => {
+      const documentUrls = [
+        documentDraft.documents_folder_url,
+        ...DISTRIBUTION_DOCUMENT_FIELDS.map(([key]) => documentDraft[`${key}_url`]),
+      ].map(value => String(value || '').trim()).filter(Boolean);
+      if (documentUrls.some(url => !/^https?:\/\//i.test(url))) {
+        setDocumentsMessage({ type: 'error', text: 'Link dokumen harus diawali http:// atau https://.' });
+        return;
+      }
+      setDocumentsSaving(true);
+      setDocumentsMessage(null);
+      try {
+        const result = await apiRequest('distribution.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+          body: JSON.stringify({ action: 'save_documents', id: item.distribution_id, documents: documentDraft }),
+        });
+        const savedRow = result.row || {};
+        const updatedItem = {
+          ...item,
+          ...savedRow,
+          distribution_id: Number(savedRow.id || item.distribution_id),
+          community_name: savedRow.tribe || item.community_name,
+          documents: savedRow.documents || distributionDocumentSummary(documentDraft).items,
+        };
+        setDocumentDraft(distributionRecordFromMapItem(updatedItem));
+        setDocumentsEditing(false);
+        setDocumentsMessage({
+          type: result.pending_sync ? 'info' : 'success',
+          text: result.warning || 'Checklist dan link dokumen tersimpan.',
+        });
+        onDocumentsSaved?.(updatedItem);
+      } catch (error) {
+        setDocumentsMessage({ type: 'error', text: error.message || 'Checklist dokumen gagal disimpan.' });
+      } finally {
+        setDocumentsSaving(false);
+      }
+    };
     return h('section', { className: 'location-detail-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm' },
       h('div', { className: 'flex items-start justify-between gap-3' },
         h('div', { className: 'min-w-0' },
@@ -2224,6 +2582,16 @@
         hasBnba ? h(Badge, { status: 'checked' }, 'ada data BNBA') : null,
         bnba.fix_status ? h(Badge, { status: bnba.fix_status }, bnba.fix_status === 'approved' ? 'fix disetujui' : 'fix menunggu') : null,
         item.updated_at || item.checked_at || item.uploaded_at ? h(Badge, { status: 'processing' }, formatDateTime(item.updated_at || item.checked_at || item.uploaded_at)) : null
+      ),
+      h('div', { className: 'mt-3 grid gap-2' },
+        canEditDocuments ? h('div', { className: 'flex items-center justify-end gap-2' },
+          documentsEditing ? h(React.Fragment, null,
+            h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', onClick: cancelDocumentEdit, disabled: documentsSaving }, h(Icon, { name: 'X', size: 14 }), 'Batal'),
+            h(Button, { type: 'button', variant: 'success', className: 'h-9 gap-2 px-3 text-xs', onClick: saveDocuments, disabled: documentsSaving }, h(Icon, { name: documentsSaving ? 'LoaderCircle' : 'Save', size: 14 }), documentsSaving ? 'Menyimpan' : 'Simpan')
+          ) : h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', onClick: () => setDocumentsEditing(true) }, h(Icon, { name: 'Pencil', size: 14 }), 'Edit dokumen')
+        ) : null,
+        documentsMessage ? h(Notice, { message: documentsMessage }) : null,
+        h(DistributionDocumentChecklist, { value: documentsEditing ? documentDraft : item, editable: documentsEditing, onChange: setDocumentValue })
       ),
       h('div', { className: 'mt-3' },
         h(Button, { type: 'button', variant: 'blue', className: 'w-full gap-2', onClick: () => onStartPadan?.(item) },
@@ -2444,6 +2812,7 @@
                     ),
                     h('div', { className: 'stat-detail-counts' },
                       h('span', null, h(Icon, { name: 'LocateFixed', size: 14 }), `${fullNumber(row.locations || 0)} lokasi`),
+                      Number(row.documents_total || 0) ? h('span', { title: `${fullNumber(row.documents_missing || 0)} dokumen belum lengkap` }, h(Icon, { name: 'FolderCheck', size: 14 }), `${fullNumber(row.documents_complete || 0)}/${fullNumber(row.documents_total || 0)} dokumen`) : null,
                       h('span', { title: householdSummaryText(row) }, h(Icon, { name: 'Users', size: 14 }), `${fullNumber(households.effective)} KK final`),
                       h('span', { title: 'KK dari angka awal Excel/persebaran' }, h(Icon, { name: 'Table', size: 14 }), `${fullNumber(households.distribution)} by Excel`),
                       h('span', { title: 'KK unik dari hasil padan BNBA' }, h(Icon, { name: 'FileSpreadsheet', size: 14 }), `${fullNumber(households.bnba)} by padan`)
@@ -2736,6 +3105,7 @@
     const [data, setData] = useState({ summary: {}, province_stats: [], source_breakdown: [], breakdowns: {}, items: [] });
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState(null);
+    const [proposalModalOpen, setProposalModalOpen] = useState(false);
 
     useEffect(() => { queryRef.current = query; }, [query]);
 
@@ -3420,6 +3790,8 @@
       { key: 'households', label: 'KK final', value: summaryHouseholds.effective, tone: 'slate', icon: 'Users', breakdownKey: 'location', subtitle: householdCardSubtitle },
       { key: 'locations_with_households', label: 'Lokasi KK Terisi', value: summary.locations_with_households, tone: 'emerald', icon: 'CheckCircle2', breakdownKey: 'location', subtitle: 'Lokasi dengan KK final lebih dari 0', filter: row => effectiveHouseholds(row) > 0 },
       { key: 'locations_zero_households', label: 'Lokasi KK 0', value: summary.locations_zero_households, tone: 'amber', icon: 'CircleSlash', breakdownKey: 'location', subtitle: 'Lokasi yang masih 0 KK final', filter: row => effectiveHouseholds(row) <= 0 },
+      { key: 'documents_complete', label: 'Dokumen Lengkap', value: summary.document_locations_complete, tone: 'emerald', icon: 'FolderCheck', breakdownKey: 'location', subtitle: `${fullNumber(summary.documents_complete || 0)} dari ${fullNumber(summary.documents_total || 0)} item terpenuhi`, filter: row => Number(row.documents_total || 0) > 0 && Number(row.documents_complete || 0) === Number(row.documents_total || 0) },
+      { key: 'documents_missing', label: 'Dokumen Belum Lengkap', value: summary.document_locations_missing, tone: 'amber', icon: 'Files', breakdownKey: 'location', subtitle: `${fullNumber(summary.document_locations_started || 0)} lokasi sudah mulai dilengkapi`, filter: row => Number(row.documents_complete || 0) < Number(row.documents_total || 0) },
     ];
     const activeStatDetail = statCards.find(stat => stat.key === statDetailKey) || null;
     const statDetailRows = activeStatDetail
@@ -3494,8 +3866,22 @@
               selectedProvince ? h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', onClick: () => { setSelectedProvince(''); loadData({ province: '' }); } }, h(Icon, { name: 'X', size: 14 }), 'Provinsi') : null,
               selectedSource ? h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', onClick: () => { setSelectedSource(''); loadData({ source: '' }); } }, h(Icon, { name: 'X', size: 14 }), 'Sumber') : null
             ) : null,
+            h(Button, {
+              type: 'button',
+              variant: 'success',
+              onClick: () => setProposalModalOpen(true),
+              className: 'w-full gap-2 text-xs font-black shadow-xs my-1 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white py-2.5 rounded-xl border border-purple-800'
+            },
+              h(Icon, { name: 'FilePlus', size: 16 }),
+              'Usulkan Data KAT Baru (Publik)'
+            ),
             h(Notice, { message })
           ),
+          proposalModalOpen ? h(KatProposalModal, {
+            isOpen: proposalModalOpen,
+            onClose: () => setProposalModalOpen(false),
+            onSuccess: () => loadData()
+          }) : null,
           selectedProvince ? h('div', { className: 'region-detail mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4' },
             h('div', { className: 'flex items-start justify-between gap-3' },
               h('div', { className: 'min-w-0' },
@@ -3534,7 +3920,18 @@
             ),
             h(SourcePills, { sources: activeSources, selectedSource, onSelect: source => { setSelectedSource(source); loadData({ source }); } })
           ) : null,
-          selectedItem ? h('div', { className: 'mt-4' }, h(LocationDetailPanel, { item: selectedItem, onClose: () => setSelectedItem(null), onStartPadan })) : null,
+          selectedItem ? h('div', { className: 'mt-4' }, h(LocationDetailPanel, {
+            item: selectedItem,
+            onClose: () => setSelectedItem(null),
+            onStartPadan,
+            onDocumentsSaved: updatedItem => {
+              setSelectedItem(current => current ? { ...updatedItem, __idx: current.__idx } : current);
+              setData(current => ({
+                ...current,
+                items: (current.items || []).map(row => Number(row.distribution_id || 0) === Number(updatedItem.distribution_id || 0) ? { ...row, ...updatedItem } : row),
+              }));
+            },
+          })) : null,
           h('div', { className: 'location-list mt-4 grid max-h-[470px] gap-3 overflow-auto pr-1' },
             items.length ? items.map((item, idx) => {
               const key = locationItemKey(item, idx);
@@ -3550,6 +3947,7 @@
                     h('span', { className: 'flex shrink-0 items-center gap-2' },
                       h(Badge, { status: item.status }, item.status),
                       item.bnba_summary?.has_bnba ? h(Badge, { status: 'checked' }, 'BNBA') : null,
+                      Number(item.documents_total || 0) ? h(Badge, { status: Number(item.documents_complete || 0) === Number(item.documents_total || 0) ? 'checked' : 'pending' }, `${fullNumber(item.documents_complete || 0)}/${fullNumber(item.documents_total || 0)} dok.`) : null,
                       h(Icon, { name: 'ChevronRight', size: 16, className: 'text-slate-400' })
                     )
                   ),
@@ -4450,7 +4848,9 @@
       ['content', 'Konten', 'FileText'],
       ['geojson', 'GeoJSON', 'Layers3'],
     ];
-    const [key, setKey] = useState(localStorage.getItem('admin_key') || '');
+    const storedAdminKey = localStorage.getItem('admin_key') || '';
+    const [key, setKey] = useState(storedAdminKey);
+    const [activeKey, setActiveKey] = useState(storedAdminKey);
     const [tab, setTab] = useState(() => {
       const requested = currentQuery().get('admin_tab') || localStorage.getItem('admin_tab') || 'jobs';
       return adminTabs.some(([name]) => name === requested) ? requested : 'jobs';
@@ -4459,6 +4859,19 @@
     const [message, setMessage] = useState(null);
     const [loading, setLoading] = useState(false);
     const [busyJobs, setBusyJobs] = useState({});
+    const adminTabsRef = useRef(null);
+
+    useEffect(() => {
+      const container = adminTabsRef.current;
+      if (!container) return undefined;
+      const frame = window.requestAnimationFrame(() => {
+        const activeButton = container.querySelector('[data-admin-tab-active="true"]');
+        if (!activeButton) return;
+        const targetLeft = activeButton.offsetLeft - ((container.clientWidth - activeButton.offsetWidth) / 2);
+        container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }, [tab]);
 
     function switchAdminTab(nextTab) {
       if (!adminTabs.some(([name]) => name === nextTab)) return;
@@ -4472,19 +4885,25 @@
     }
 
     function adminHeaders() {
-      return { 'Content-Type': 'application/json', 'X-Admin-Key': key };
+      return { 'Content-Type': 'application/json', 'X-Admin-Key': activeKey };
     }
 
     async function loadJobs(options = {}) {
-      if (!key) return setMessage({ type: 'error', text: 'Masukkan admin key.' });
+      const candidateKey = key.trim();
+      if (!candidateKey) return setMessage({ type: 'error', text: 'Masukkan admin key.' });
       setLoading(true);
+      if (!options.silent) setActiveKey('');
       if (!options.silent) setMessage(null);
-      localStorage.setItem('admin_key', key);
       try {
-        const query = new URLSearchParams({ key, limit: PAGE_SIZE });
+        const query = new URLSearchParams({ key: candidateKey, limit: PAGE_SIZE });
         const data = await apiRequest(`jobs.php?${query.toString()}`);
+        localStorage.setItem('admin_key', candidateKey);
+        setKey(candidateKey);
+        setActiveKey(candidateKey);
         setJobs(data.jobs || []);
+        if (!options.silent) setMessage({ type: 'info', text: 'Akses admin aktif. Semua kontrol sekarang dapat digunakan.' });
       } catch (error) {
+        localStorage.removeItem('admin_key');
         setMessage({ type: 'error', text: error.message });
       } finally {
         setLoading(false);
@@ -4530,25 +4949,53 @@
     return h('main', { className: 'grid gap-5' },
       h('section', { className: 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' },
         h('div', { className: 'admin-auth-grid grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]' },
-          h(Field, { label: 'Admin key' }, h(TextInput, { type: 'password', value: key, onChange: event => setKey(event.target.value), placeholder: 'ADMIN_KEY' })),
+          h(Field, { label: 'Admin key' }, h(TextInput, {
+            type: 'password',
+            value: key,
+            onChange: event => {
+              const nextKey = event.target.value;
+              setKey(nextKey);
+              if (nextKey.trim() !== activeKey) setActiveKey('');
+            },
+            onKeyDown: event => {
+              if (event.key === 'Enter' && !loading && key.trim()) loadJobs();
+            },
+            placeholder: 'Masukkan ADMIN_KEY lalu tekan Enter',
+          })),
           h('div', { className: 'admin-auth-actions flex items-end gap-2' },
-            h(Button, { type: 'button', variant: 'blue', disabled: loading || !key, onClick: loadJobs }, loading ? 'Memuat...' : 'Muat'),
-            h('a', { href: key ? apiUrl(`export_jobs.php?key=${encodeURIComponent(key)}`) : '#', className: 'admin-export-button inline-flex h-11 items-center rounded-xl bg-white px-4 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50' }, h(Icon, { name: 'Download', size: 15 }), h('span', null, 'Export'))
+            h(Button, { type: 'button', variant: 'blue', disabled: loading || !key.trim(), onClick: loadJobs }, loading ? 'Memverifikasi...' : activeKey ? 'Muat ulang' : 'Buka admin'),
+            h('a', {
+              href: activeKey ? apiUrl(`export_jobs.php?key=${encodeURIComponent(activeKey)}`) : '#',
+              'aria-disabled': activeKey ? 'false' : 'true',
+              onClick: event => {
+                if (!activeKey) {
+                  event.preventDefault();
+                  setMessage({ type: 'error', text: 'Buka akses admin terlebih dahulu sebelum export.' });
+                }
+              },
+              className: cx('admin-export-button inline-flex h-11 items-center rounded-xl bg-white px-4 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50', !activeKey && 'cursor-not-allowed opacity-45'),
+            }, h(Icon, { name: 'Download', size: 15 }), h('span', null, 'Export'))
           )
         ),
-        h('div', { className: 'admin-tabs mt-4 flex flex-wrap gap-2' }, adminTabs.map(([name, label, icon]) =>
-          h(Button, { key: name, type: 'button', variant: tab === name ? 'primary' : 'soft', className: 'gap-2', onClick: () => switchAdminTab(name) }, h(Icon, { name: icon, size: 16 }), label)
+        !activeKey
+          ? h('div', { className: 'mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold leading-6 text-amber-900' },
+              h(Icon, { name: 'LockKeyhole', size: 17, className: 'mt-1 shrink-0' }),
+              h('span', null, 'Panel masih terkunci. Masukkan ADMIN_KEY lalu klik Buka admin. Kontrol operasional akan aktif setelah key berhasil diverifikasi.'))
+          : h('div', { className: 'mt-3 flex items-center gap-2 text-xs font-black text-emerald-700' },
+              h(Icon, { name: 'ShieldCheck', size: 16 }), 'Akses admin terverifikasi'),
+        h('div', { ref: adminTabsRef, className: 'admin-tabs mt-4 flex flex-wrap gap-2' }, adminTabs.map(([name, label, icon]) =>
+          h(Button, { key: name, type: 'button', variant: tab === name ? 'primary' : 'soft', className: 'gap-2', 'data-admin-tab-active': tab === name ? 'true' : 'false', 'aria-pressed': tab === name ? 'true' : 'false', onClick: () => switchAdminTab(name) }, h(Icon, { name: icon, size: 16 }), label)
         )),
         h('div', { className: 'mt-4' }, h(Notice, { message }))
       ),
-      tab === 'jobs' ? h(AdminJobs, { jobs, adminKey: key, busyJobs, onAction: jobAction }) : null,
-      tab === 'distribution' ? h(DistributionAdmin, { adminKey: key, headers: adminHeaders }) : null,
-      tab === 'fix' ? h(FixAdmin, { adminKey: key, headers: adminHeaders }) : null,
-      tab === 'mail' ? h(MailAdmin, { adminKey: key }) : null,
-      tab === 'store' ? h(DataStoreAdmin, { adminKey: key }) : null,
-      tab === 'links' ? h(LinkArchiveAdmin, { adminKey: key }) : null,
-      tab === 'content' ? h(ContentAdmin, { adminKey: key }) : null,
-      tab === 'geojson' ? h(GeojsonAdmin, { adminKey: key, headers: adminHeaders }) : null
+      tab === 'jobs' ? h(AdminJobs, { jobs, adminKey: activeKey, busyJobs, onAction: jobAction }) : null,
+      tab === 'distribution' ? h(DistributionAdmin, { adminKey: activeKey, headers: adminHeaders }) : null,
+      tab === 'fix' ? h(FixAdmin, { adminKey: activeKey, headers: adminHeaders }) : null,
+      tab === 'mail' ? h(MailAdmin, { adminKey: activeKey }) : null,
+      tab === 'store' ? h(DataStoreAdmin, { adminKey: activeKey }) : null,
+      tab === 'links' ? h(LinkArchiveAdmin, { adminKey: activeKey }) : null,
+      tab === 'content' ? h(ContentAdmin, { adminKey: activeKey }) : null,
+      tab === 'geojson' ? h(GeojsonAdmin, { adminKey: activeKey, headers: adminHeaders }) : null
     );
   }
 
@@ -4589,19 +5036,19 @@
             h('thead', { className: 'bg-slate-950 text-white' },
               h('tr', null, ['ID', 'File', 'Wilayah', 'Status', 'Upload', 'Progress', 'BNBA/Fix', 'Hasil', 'Aksi'].map(col => h('th', { key: col, className: 'px-3 py-3 text-xs font-black uppercase' }, col)))
             ),
-            h('tbody', null, jobs.length ? jobs.map(job => h('tr', { key: job.id, className: 'border-b border-slate-100 odd:bg-white even:bg-slate-50' },
-              h('td', { className: 'px-3 py-3' },
+            h('tbody', null, jobs.length ? jobs.map(job => h('tr', { key: job.id, className: 'admin-job-row border-b border-slate-100 odd:bg-white even:bg-slate-50' },
+              h('td', { className: 'px-3 py-3', 'data-label': 'ID' },
                 h('div', { className: 'grid gap-2' },
                   h('span', { className: 'font-black' }, `#${job.id}`),
                   jobShortUrl(job) ? h(CopyShortlinkButton, { url: jobShortUrl(job), compact: true, label: '' }) : null
                 )
               ),
-              h('td', { className: 'max-w-64 break-words px-3 py-3', title: job.original_filename }, job.original_filename),
-              h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600' }, [job.community_name, job.target_location, job.target_village, job.target_district, job.target_regency, job.target_province].filter(Boolean).join(', ') || '-'),
-              h('td', { className: 'px-3 py-3' }, h(Badge, { status: job.status }, job.status)),
-              h('td', { className: 'px-3 py-3 text-slate-500' }, formatDateTime(job.uploaded_at)),
-              h('td', { className: 'px-3 py-3 text-slate-600' }, `${compactNumber(job.rows_processed || 0)} / ${compactNumber(job.rows_total || 0)}`),
-              h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600' },
+              h('td', { className: 'max-w-64 break-words px-3 py-3', 'data-label': 'File', title: job.original_filename }, job.original_filename),
+              h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600', 'data-label': 'Wilayah' }, [job.community_name, job.target_location, job.target_village, job.target_district, job.target_regency, job.target_province].filter(Boolean).join(', ') || '-'),
+              h('td', { className: 'px-3 py-3', 'data-label': 'Status' }, h(Badge, { status: job.status }, job.status)),
+              h('td', { className: 'px-3 py-3 text-slate-500', 'data-label': 'Upload' }, formatDateTime(job.uploaded_at)),
+              h('td', { className: 'px-3 py-3 text-slate-600', 'data-label': 'Progress' }, `${compactNumber(job.rows_processed || 0)} / ${compactNumber(job.rows_total || 0)}`),
+              h('td', { className: 'px-3 py-3 text-xs leading-5 text-slate-600', 'data-label': 'BNBA/Fix' },
                 h('div', { className: 'flex items-center gap-3' },
                   h('div', { className: 'min-w-0' },
                     h('span', { className: 'font-black text-slate-950 block' }, `${fullNumber(job.bnba_summary?.kk_unique || 0)} KK unik`),
@@ -4610,8 +5057,8 @@
                   job.fix_status ? h(Badge, { status: job.fix_status }, job.fix_status === 'approved' ? 'fix disetujui' : job.fix_status === 'pending' ? 'request fix' : job.fix_status) : (job.wants_fix ? h(Badge, { status: 'pending' }, 'request fix') : h(Badge, { status: 'slate' }, 'bukan fix'))
                 )
               ),
-              h('td', { className: 'px-3 py-3' }, h(ResultDownloadLinks, { job, adminKey })),
-              h('td', { className: 'px-3 py-3' },
+              h('td', { className: 'px-3 py-3', 'data-label': 'Hasil' }, h(ResultDownloadLinks, { job, adminKey, compact: true })),
+              h('td', { className: 'px-3 py-3', 'data-label': 'Aksi' },
                 h('div', { className: 'admin-action-row flex items-center gap-2 flex-nowrap whitespace-nowrap' },
                   job.status === 'processing' ? h(Button, { type: 'button', variant: 'soft', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'stop') }, h(Icon, { name: 'OctagonPause', size: 14 }), busyJobs[job.id] ? '...' : 'Stop') : null,
                   ['queued', 'processing'].includes(job.status) ? h(Button, { type: 'button', variant: 'danger', disabled: Boolean(busyJobs[job.id]), className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => onAction(job, 'cancel') }, h(Icon, { name: 'Ban', size: 14 }), busyJobs[job.id] ? '...' : 'Cancel') : null,
@@ -4627,7 +5074,21 @@
   }
 
   function DistributionAdmin({ adminKey }) {
-    const empty = { source_data: 'DATA PERSEBARAN KAT', data_year: new Date().getFullYear(), province: '', regency: '', district: '', village: '', location: '', tribe: '', households_spread: '', households_total: '', is_proposed: 1 };
+    const empty = {
+      source_data: 'DATA PERSEBARAN KAT',
+      data_year: new Date().getFullYear(),
+      province: '',
+      regency: '',
+      district: '',
+      village: '',
+      location: '',
+      tribe: '',
+      households_spread: '',
+      households_total: '',
+      is_proposed: 1,
+      documents_folder_url: '',
+      ...Object.fromEntries(DISTRIBUTION_DOCUMENT_FIELDS.flatMap(([key]) => [[key, 0], [`${key}_url`, '']])),
+    };
     const [rows, setRows] = useState([]);
 
     const existingSources = useMemo(() => {
@@ -4653,6 +5114,71 @@
     const [preview, setPreview] = useState(null);
     const [message, setMessage] = useState(null);
     const [loading, setLoading] = useState(false);
+
+    const [proposals, setProposals] = useState([]);
+    const [proposalStatusFilter, setProposalStatusFilter] = useState('pending');
+    const [adminSubTab, setAdminSubTab] = useState('data');
+    const [proposalCount, setProposalCount] = useState({ total: 0, pending: 0 });
+
+    async function loadProposals(statusFilter = proposalStatusFilter) {
+      if (!adminKey) return;
+      try {
+        const query = statusFilter ? `?status=${statusFilter}` : '';
+        const data = await apiRequest(`distribution_proposals.php${query}`, {
+          headers: { 'X-Admin-Key': adminKey }
+        });
+        if (data.ok) {
+          setProposals(data.proposals || []);
+          setProposalCount(data.summary || { total: 0, pending: 0 });
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    useEffect(() => {
+      if (adminKey) {
+        loadProposals('pending');
+      }
+    }, [adminKey]);
+
+    async function handleApproveProposal(id) {
+      if (!confirm('Apakah Anda yakin ingin menyetujui usulan ini dan menerbitkannya ke Peta Persebaran KAT?')) return;
+      setLoading(true);
+      try {
+        const data = await apiRequest('distribution_proposals.php?action=approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+          body: JSON.stringify({ id })
+        });
+        setMessage({ type: 'info', text: data.message });
+        await loadProposals(proposalStatusFilter);
+        await loadRows();
+      } catch (err) {
+        setMessage({ type: 'error', text: err.message });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function handleRejectProposal(id) {
+      const notes = prompt('Masukkan alasan penolakan (opsional):');
+      if (notes === null) return;
+      setLoading(true);
+      try {
+        const data = await apiRequest('distribution_proposals.php?action=reject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+          body: JSON.stringify({ id, admin_notes: notes })
+        });
+        setMessage({ type: 'info', text: data.message });
+        await loadProposals(proposalStatusFilter);
+      } catch (err) {
+        setMessage({ type: 'error', text: err.message });
+      } finally {
+        setLoading(false);
+      }
+    }
 
     const [pdfFile, setPdfFile] = useState(null);
     const [pdfLoading, setPdfLoading] = useState(false);
@@ -4986,7 +5512,7 @@
         upload.append('file', file);
         const data = await uploadFormWithProgress(apiUrl('distribution.php'), upload, null);
         setPreview(data);
-        setMessage({ type: 'info', text: `${compactNumber(data.new_count)} baris baru, ${compactNumber(data.duplicate_count)} duplikat.` });
+        setMessage({ type: 'info', text: `${compactNumber(data.new_count)} baris baru, ${compactNumber(data.update_count || 0)} checklist akan diperbarui, ${compactNumber(data.duplicate_count)} duplikat.` });
       } catch (error) {
         setMessage({ type: 'error', text: error.message });
       } finally {
@@ -5000,7 +5526,7 @@
       try {
         const data = await apiRequest('distribution.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ action: 'import_commit', token: preview.token }) });
         setPreview(null);
-        setMessage({ type: 'info', text: `${compactNumber(data.inserted)} baris ditambahkan.` });
+        setMessage({ type: 'info', text: `${compactNumber(data.inserted)} baris ditambahkan dan ${compactNumber(data.updated || 0)} checklist lokasi diperbarui.` });
         await loadRows();
       } catch (error) {
         setMessage({ type: 'error', text: error.message });
@@ -5014,7 +5540,92 @@
     }
 
     return h('section', { className: 'distribution-admin-grid grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)]' },
-      h('div', { className: 'distribution-admin-form rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' },
+      h('div', { className: 'distribution-admin-switcher' },
+        h('div', { className: 'distribution-admin-switcher-actions' },
+          h('button', {
+            type: 'button',
+            onClick: () => setAdminSubTab('data'),
+            className: cx('px-4 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-2', adminSubTab === 'data' ? 'bg-purple-700 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+          }, h(Icon, { name: 'Database', size: 16 }), 'Data Peta Persebaran'),
+          h('button', {
+            type: 'button',
+            onClick: () => { setAdminSubTab('proposals'); loadProposals(proposalStatusFilter); },
+            className: cx('px-4 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-2 relative', adminSubTab === 'proposals' ? 'bg-purple-700 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+          },
+            h(Icon, { name: 'FileCheck', size: 16 }),
+            'Verifikasi Usulan Publik',
+            proposalCount.pending > 0 && h('span', { className: 'px-2 py-0.5 text-[10px] font-black rounded-full bg-rose-500 text-white shadow-xs' }, proposalCount.pending)
+          )
+        )
+      ),
+
+      adminSubTab === 'proposals' ? h('div', { className: 'distribution-admin-proposals rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4' },
+        h('div', { className: 'flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4' },
+          h('div', null,
+            h('h2', { className: 'text-lg font-black text-slate-900 m-0' }, 'Verifikasi Usulan KAT Publik'),
+            h('p', { className: 'text-xs text-slate-500 m-0 mt-0.5 font-semibold' }, 'Daftar pengusulan lokasi baru dari publik/dinas yang membutuhkan persetujuan Admin.')
+          ),
+          h('div', { className: 'flex items-center gap-2' },
+            ['pending', 'approved', 'rejected', ''].map(st =>
+              h('button', {
+                key: st || 'all',
+                type: 'button',
+                onClick: () => { setProposalStatusFilter(st); loadProposals(st); },
+                className: cx('px-3 py-1.5 text-xs font-black rounded-lg border transition-all', proposalStatusFilter === st ? 'bg-purple-100 border-purple-300 text-purple-800' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100')
+              }, st === 'pending' ? '⏳ Pending' : st === 'approved' ? '✅ Disetujui' : st === 'rejected' ? '❌ Ditolak' : 'Semua Usulan')
+            )
+          )
+        ),
+        proposals.length ? h('div', { className: 'overflow-x-auto rounded-xl border border-slate-200' },
+          h('table', { className: 'w-full text-left text-xs' },
+            h('thead', { className: 'bg-slate-100 font-black text-slate-800 uppercase text-[11px] border-b border-slate-200' },
+              h('tr', null,
+                h('th', { className: 'p-3 text-center' }, '#'),
+                h('th', { className: 'p-3' }, 'Status'),
+                h('th', { className: 'p-3' }, 'Pengusul'),
+                h('th', { className: 'p-3' }, 'Suku / Komunitas'),
+                h('th', { className: 'p-3' }, 'Wilayah (Prov / Kab / Kec / Desa)'),
+                h('th', { className: 'p-3 text-center' }, 'KK'),
+                h('th', { className: 'p-3' }, 'Dokumen Lampiran'),
+                h('th', { className: 'p-3 text-center' }, 'Aksi')
+              )
+            ),
+            h('tbody', { className: 'divide-y divide-slate-100 font-semibold text-slate-700' },
+              proposals.map((item, idx) =>
+                h('tr', { key: item.id || idx, className: item.status === 'pending' ? 'bg-amber-50/50' : 'hover:bg-slate-50' },
+                  h('td', { className: 'p-3 text-center font-bold text-slate-400' }, idx + 1),
+                  h('td', { className: 'p-3 font-bold' },
+                    item.status === 'pending' ? h('span', { className: 'px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-100 text-amber-800 border border-amber-300' }, '⏳ Pending') :
+                    item.status === 'approved' ? h('span', { className: 'px-2.5 py-1 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300' }, '✅ Disetujui') :
+                    h('span', { className: 'px-2.5 py-1 rounded-full text-[11px] font-black bg-rose-100 text-rose-800 border border-rose-300' }, '❌ Ditolak')
+                  ),
+                  h('td', { className: 'p-3' },
+                    h('div', { className: 'font-black text-slate-900' }, item.submitted_by_name || 'Masyarakat'),
+                    item.submitted_by_email && h('div', { className: 'text-[11px] text-slate-500 font-bold' }, item.submitted_by_email)
+                  ),
+                  h('td', { className: 'p-3 font-black text-purple-900' }, item.tribe || '-'),
+                  h('td', { className: 'p-3' },
+                    h('div', { className: 'font-bold text-slate-900' }, `${item.province}${item.regency ? `, ${item.regency}` : ''}`),
+                    h('div', { className: 'text-[11px] text-slate-500' }, `${item.district || ''} ${item.village || ''} ${item.location ? `(${item.location})` : ''}`)
+                  ),
+                  h('td', { className: 'p-3 text-center font-black' }, item.households_spread || 0),
+                  h('td', { className: 'p-3' },
+                    item.submitted_file_url ? h('a', { href: item.submitted_file_url, target: '_blank', rel: 'noopener noreferrer', className: 'inline-flex items-center gap-1 text-purple-700 hover:underline font-bold text-xs' }, h(Icon, { name: 'FileText', size: 14 }), item.original_filename || 'Buka File') : h('span', { className: 'text-slate-400 text-[11px]' }, 'Tanpa file')
+                  ),
+                  h('td', { className: 'p-3 text-center' },
+                    item.status === 'pending' ? h('div', { className: 'flex items-center justify-center gap-2' },
+                      h('button', { type: 'button', onClick: () => handleApproveProposal(item.id), className: 'px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-black text-xs shadow-xs hover:bg-emerald-700 flex items-center gap-1' }, h(Icon, { name: 'Check', size: 14 }), 'Setujui'),
+                      h('button', { type: 'button', onClick: () => handleRejectProposal(item.id), className: 'px-3 py-1.5 rounded-lg bg-rose-600 text-white font-black text-xs shadow-xs hover:bg-rose-700 flex items-center gap-1' }, h(Icon, { name: 'X', size: 14 }), 'Tolak')
+                    ) : h('span', { className: 'text-xs text-slate-400 font-bold' }, item.reviewed_by ? `Oleh ${item.reviewed_by}` : '-')
+                  )
+                )
+              )
+            )
+          )
+        ) : h('div', { className: 'p-8 text-center text-slate-400 font-bold bg-slate-50 rounded-xl border border-dashed border-slate-200' }, 'Belum ada usulan data publik pada filter ini.')
+      ) : null,
+
+      adminSubTab === 'data' && h('div', { className: 'distribution-admin-form rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' },
         h('h2', { className: 'text-lg font-black text-slate-950' }, 'Data persebaran'),
         h('p', { className: 'mt-1 text-xs font-bold leading-5 text-slate-500' }, 'Field desa, distrik/kecamatan, dan lokasi dibersihkan otomatis saat disimpan atau diimport. Dusun masuk ke lokasi, bukan desa.'),
         h('div', { className: 'mt-4 grid gap-3' },
@@ -5040,6 +5651,7 @@
             )
           ),
           h('label', { className: 'flex items-center gap-2 text-sm font-bold text-slate-700' }, h('input', { type: 'checkbox', checked: Boolean(form.is_proposed), onChange: event => setField('is_proposed', event.target.checked ? 1 : 0) }), 'Pengusulan'),
+          h(DistributionDocumentChecklist, { value: form, editable: true, onChange: setField }),
           h(Button, { type: 'button', variant: 'success', disabled: loading || !adminKey, onClick: saveRow }, form.id ? 'Update' : 'Tambah')
         ),
         h('div', { className: 'mt-5 border-t border-slate-100 pt-5' },
@@ -5053,7 +5665,9 @@
               hint: 'Drop XLSX, CSV, XML, atau TXT untuk dicek duplikat sebelum ditambahkan.',
             }),
             h(Button, { type: 'button', variant: 'soft', disabled: loading || !file || !adminKey, onClick: importPreview }, 'Preview import'),
-            preview ? h(Button, { type: 'button', variant: 'blue', disabled: loading, onClick: importCommit }, `Tambahkan ${compactNumber(preview.new_count)} baris`) : null
+            preview ? h(Button, { type: 'button', variant: 'blue', disabled: loading, onClick: importCommit },
+              `Proses ${compactNumber((preview.new_count || 0) + (preview.update_count || 0))} baris`
+            ) : null
           )
         ),
         h('div', { className: 'pdf-import-container' },
@@ -5214,7 +5828,7 @@
             h('div', { className: 'flex flex-wrap items-center justify-between gap-3' },
               h('div', null,
                 h('p', { className: 'text-sm font-black text-blue-950' }, 'Ringkasan import'),
-                h('p', { className: 'mt-1 text-xs font-bold text-blue-700' }, `${compactNumber(preview.total_rows || 0)} baris dibaca, ${compactNumber(preview.new_count || 0)} baru, ${compactNumber(preview.duplicate_count || 0)} duplikat`)
+                h('p', { className: 'mt-1 text-xs font-bold text-blue-700' }, `${compactNumber(preview.total_rows || 0)} baris dibaca, ${compactNumber(preview.new_count || 0)} baru, ${compactNumber(preview.update_count || 0)} update checklist, ${compactNumber(preview.duplicate_count || 0)} duplikat`)
               ),
               h(SourcePills, { sources: sourceBreakdownFromRows(preview.preview_rows || []) })
             )
@@ -5247,6 +5861,10 @@
             ),
             h('div', { className: 'distribution-record-actions' },
               row.data_year ? h('span', { className: 'distribution-year-pill' }, row.data_year) : null,
+              h('span', {
+                className: cx('distribution-year-pill', Number(row.documents_complete || 0) === Number(row.documents_total || DISTRIBUTION_DOCUMENT_FIELDS.length) && 'is-complete'),
+                title: `${fullNumber(row.documents_linked || 0)} tautan dokumen`,
+              }, `${fullNumber(row.documents_complete || 0)}/${fullNumber(row.documents_total || DISTRIBUTION_DOCUMENT_FIELDS.length)} dok.`),
               h(Button, { type: 'button', variant: 'soft', className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => setForm(row) }, h(Icon, { name: 'Pencil', size: 13 }), 'Edit'),
               h(Button, { type: 'button', variant: 'danger', className: 'h-8 gap-1.5 px-2 text-xs', onClick: () => deleteRow(row.id) }, h(Icon, { name: 'Trash2', size: 13 }), 'Hapus')
             )
@@ -5853,6 +6471,7 @@
     const [summary, setSummary] = useState(null);
     const [driveSummary, setDriveSummary] = useState(null);
     const [driveFolders, setDriveFolders] = useState({});
+    const [driveOauth, setDriveOauth] = useState({ client_id: '', client_secret: '', redirect_uri: '' });
     const [message, setMessage] = useState(null);
     const [loading, setLoading] = useState(false);
     const [driveLoading, setDriveLoading] = useState(false);
@@ -5929,6 +6548,11 @@
         const data = await apiRequest(`google_drive_accounts.php?key=${encodeURIComponent(adminKey)}${refresh ? '&refresh=1' : ''}`);
         setDriveSummary(data);
         setDriveFolders(Object.fromEntries((data.accounts || []).map(account => [account.id, account.folder_id || ''])));
+        setDriveOauth(current => ({
+          client_id: data.oauth_client_id || current.client_id || '',
+          client_secret: '',
+          redirect_uri: data.redirect_uri || current.redirect_uri || '',
+        }));
       } catch (error) {
         setMessage({ type: 'error', text: error.message });
       } finally {
@@ -5950,11 +6574,17 @@
             enabled: changes.enabled ?? (account?.enabled !== false),
             storage_mode: changes.storage_mode || '',
             limit: changes.limit || 10,
+            oauth_client_id: changes.oauth_client_id || '',
+            oauth_client_secret: changes.oauth_client_secret || '',
+            oauth_redirect_uri: changes.oauth_redirect_uri || '',
           }),
         }, { timeoutMs: 120000 });
         if (action === 'connect_url') {
           window.location.href = data.url;
           return;
+        }
+        if (action === 'save_oauth_config') {
+          setDriveOauth(current => ({ ...current, client_secret: '' }));
         }
         const migrationDetail = data.migration
           ? ` Sisa ${fullNumber(data.migration.remaining_files || 0)} file lokal; gagal ${fullNumber(data.migration.failed_jobs || 0)} job.${data.migration.errors?.[0]?.error ? ` Error pertama: ${data.migration.errors[0].error}` : ''}`
@@ -5983,13 +6613,18 @@
     const portableLabel = storeMode === 'supabase' ? 'Supabase' : (storeMode === 'sheets' ? 'Google Sheets' : (storeMode === 'json' ? 'Big JSON' : 'Database aktif'));
     const sheetsWritePreflight = summary?.sheets_write_preflight || null;
     const sheetsWriteError = sheetsWritePreflight?.errors ? Object.values(sheetsWritePreflight.errors)[0] : '';
-    const storeDescription = storeMode === 'supabase'
-      ? 'CRUD aktif memakai Supabase. Pilihan database runtime dan akun Google Drive juga persisten untuk fungsi serverless.'
-      : storeMode === 'sheets'
-        ? 'CRUD portable memakai satu workbook Google Sheets untuk seluruh tab operasional. Persebaran dapat memakai workbook publik terpisah.'
-        : storeMode === 'json'
-          ? 'CRUD portable sedang memakai satu snapshot Big JSON di storage lokal.'
-          : 'MySQL masih menjadi sumber aktif. Dari panel ini data dapat disalin ke Big JSON atau Google Sheets sebelum mode dipindahkan.';
+    const workerControlPlane = summary?.worker_control_plane || null;
+    const storeDescription = !adminKey
+      ? 'Buka akses admin untuk membaca konfigurasi database dan mengaktifkan kontrol migrasi.'
+      : summary === null
+        ? 'Sedang membaca konfigurasi database aktif...'
+        : storeMode === 'supabase'
+          ? 'CRUD aktif memakai Supabase. Pilihan database runtime dan akun Google Drive juga persisten untuk fungsi serverless.'
+          : storeMode === 'sheets'
+            ? 'CRUD portable memakai satu workbook Google Sheets untuk seluruh tab operasional. Persebaran dapat memakai workbook publik terpisah.'
+            : storeMode === 'json'
+              ? 'CRUD portable sedang memakai satu snapshot Big JSON di storage lokal.'
+              : 'MySQL masih menjadi sumber aktif. Dari panel ini data dapat disalin ke Big JSON atau Google Sheets sebelum mode dipindahkan.';
     const configuredSheets = Object.values(store.tables || {}).filter(table => table?.spreadsheet_id).length;
 
     return h('section', { className: 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]' },
@@ -6007,6 +6642,17 @@
           h(MiniMetric, { icon: 'Clock3', label: 'Updated', value: store.updated_at ? formatDateTime(store.updated_at) : '-' }),
           h(MiniMetric, { icon: 'LibraryBig', label: 'Link seed', value: fullNumber(counts.link_archive || 0) })
         ),
+        workerControlPlane?.fallback_active ? h('div', { className: 'mt-4 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200' },
+          h('div', { className: 'flex items-start gap-3' },
+            h('span', { className: 'grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-800' }, h(Icon, { name: 'ShieldAlert', size: 18 })),
+            h('div', null,
+              h('p', { className: 'text-sm font-black text-amber-950' }, 'Worker tetap berjalan melalui JSON darurat'),
+              h('p', { className: 'mt-1 text-xs font-semibold leading-5 text-amber-900' },
+                `Google Sheets sedang bermasalah. Claim, heartbeat, progress, dan hasil job disimpan lokal lalu disinkronkan kembali${workerControlPlane.retry_at ? ` setelah ${formatDateTime(workerControlPlane.retry_at)}` : ' saat koneksi pulih'}.`),
+              workerControlPlane.reason ? h('p', { className: 'mt-1 break-words text-xs font-semibold leading-5 text-amber-800' }, workerControlPlane.reason) : null
+            )
+          )
+        ) : null,
         storeMode !== 'sheets' ? h('div', { className: 'mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-100' },
           h('p', { className: 'text-xs font-black uppercase text-slate-500' }, 'Path Big JSON'),
           h('p', { className: 'mt-1 break-all text-sm font-black text-slate-950' }, store.json_relative_path || 'data/bigjson.json'),
@@ -6063,8 +6709,8 @@
               )
             ),
             h('div', { className: 'mt-2 flex flex-wrap gap-1.5' },
-              h(Button, { type: 'button', variant: 'soft', disabled: loading || storeMode === 'supabase' || !summary?.supabase?.configured, onClick: () => runAction('migrate_table', { table: key, source: 'active', destination: 'supabase' }) }, 'Ke Supabase'),
-              h(Button, { type: 'button', variant: 'soft', disabled: loading || storeMode === 'sheets', onClick: () => runAction('migrate_table', { table: key, source: 'active', destination: 'sheets' }) }, 'Ke Sheets'),
+              h(Button, { type: 'button', variant: 'soft', disabled: loading || !adminKey || storeMode === 'supabase' || !summary?.supabase?.configured, onClick: () => runAction('migrate_table', { table: key, source: 'active', destination: 'supabase' }) }, 'Ke Supabase'),
+              h(Button, { type: 'button', variant: 'soft', disabled: loading || !adminKey || storeMode === 'sheets', onClick: () => runAction('migrate_table', { table: key, source: 'active', destination: 'sheets' }) }, 'Ke Sheets'),
               h('a', { href: adminKey ? apiUrl(`data_store.php?download_table=${encodeURIComponent(key)}&source=active&key=${encodeURIComponent(adminKey)}`) : '#', className: 'inline-flex h-9 items-center gap-1 rounded-lg bg-white px-3 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100' }, h(Icon, { name: 'Download', size: 14 }), 'Excel')
             )
           ))
@@ -6075,10 +6721,19 @@
         h('div', { className: 'flex flex-wrap items-start justify-between gap-3' },
           h('div', null,
             h('h2', { className: 'text-lg font-black text-slate-950' }, 'Google Drive storage'),
-            h('p', { className: 'mt-1 text-sm font-semibold text-slate-500' }, driveSummary?.configured
-              ? `${fullNumber(driveSummary.account_count || 0)} akun terhubung, ${fullNumber(driveSummary.enabled_count || 0)} aktif sebagai target storage.`
-              : `Belum siap: ${(driveSummary?.missing_env || ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_TOKEN_ENCRYPTION_KEY']).join(', ')}`),
-            h('p', { className: 'mt-1 text-xs font-semibold leading-5 text-slate-500' }, 'Akun yang dihubungkan juga dipakai untuk membaca dan menulis workbook Sheets bila service account tidak tersedia. Hubungkan ulang akun lama untuk memberikan izin Sheets.')
+            h('p', { className: 'mt-1 text-sm font-semibold text-slate-500' }, !adminKey
+              ? 'Status belum diperiksa karena panel admin masih terkunci.'
+              : driveSummary === null
+                ? (driveLoading ? 'Sedang memeriksa konfigurasi OAuth dan akun Google...' : 'Status akun Google belum berhasil dimuat.')
+                : driveSummary.configured
+                  ? `${fullNumber(driveSummary.account_count || 0)} akun terhubung, ${fullNumber(driveSummary.enabled_count || 0)} siap sebagai target storage.${driveSummary?.reconnect_required_count ? ` ${fullNumber(driveSummary.reconnect_required_count)} perlu dihubungkan ulang.` : ''}`
+                  : `OAuth belum lengkap: ${(driveSummary.missing_env || []).join(', ') || 'periksa konfigurasi Google pada backend.'}`),
+            h('p', { className: 'mt-1 text-xs font-semibold leading-5 text-slate-500' }, 'Akun yang siap juga dipakai untuk membaca dan menulis workbook Sheets bila service account tidak tersedia. Pastikan OAuth consent screen Google berstatus In production; mode Testing dapat membuat refresh token kedaluwarsa setelah 7 hari.'),
+            driveSummary?.encryption_key_source === 'admin_key_fallback'
+              ? h('p', { className: 'mt-2 text-xs font-bold leading-5 text-amber-700' }, 'Kunci token masih mengikuti ADMIN_KEY. Isi GOOGLE_TOKEN_ENCRYPTION_KEY yang tetap agar perubahan admin key tidak memutus akun Google.')
+              : driveSummary?.encryption_key_source === 'oauth_client_secret_fallback'
+                ? h('p', { className: 'mt-2 text-xs font-bold leading-5 text-emerald-700' }, 'Token memakai OAuth client secret yang stabil dan token lama dimigrasikan otomatis. GOOGLE_TOKEN_ENCRYPTION_KEY khusus tetap direkomendasikan untuk produksi.')
+              : null
           ),
           h('div', { className: 'flex flex-wrap gap-2' },
             h(Button, { type: 'button', variant: 'soft', className: 'gap-2', disabled: driveLoading || !adminKey, onClick: () => loadDrive(true) }, h(Icon, { name: driveLoading ? 'LoaderCircle' : 'RefreshCcw', size: 16 }), 'Refresh kuota'),
@@ -6093,9 +6748,58 @@
                 }
               },
             }, h(Icon, { name: 'FolderSync', size: 16 }), 'Migrasikan file job lama'),
-            h(Button, { type: 'button', variant: 'blue', className: 'gap-2', disabled: driveLoading || !adminKey || !driveSummary?.configured, onClick: () => driveAction('connect_url') }, h(Icon, { name: 'UserPlus', size: 16 }), 'Hubungkan akun')
+            h(Button, { type: 'button', variant: 'blue', className: 'gap-2', disabled: driveLoading || !adminKey, onClick: () => driveAction('connect_url') }, h(Icon, { name: 'UserPlus', size: 16 }), driveSummary?.reconnect_required_count ? 'Hubungkan ulang akun' : 'Tambah akun Google')
           )
         ),
+        driveSummary?.reconnect_required_count
+          ? h('div', { className: 'mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-900' },
+              `${fullNumber(driveSummary.reconnect_required_count)} akun tidak dapat membuka token tersimpan. Hubungkan ulang akun tersebut; akun bermasalah tidak akan dipakai untuk Sheets maupun upload Drive.`)
+          : null,
+        adminKey && driveSummary && !driveSummary.configured
+          ? h('div', { className: 'mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4' },
+              h('div', { className: 'flex items-start justify-between gap-3' },
+                h('div', null,
+                  h('p', { className: 'text-sm font-black text-indigo-950' }, 'Konfigurasi OAuth Google'),
+                  h('p', { className: 'mt-1 text-xs font-semibold leading-5 text-indigo-800' }, 'Masukkan credential OAuth Web application dari Google Cloud. Client Secret disimpan terenkripsi di Supabase dan tidak pernah ditampilkan kembali.')
+                ),
+                h(Badge, { status: 'pending' }, 'perlu setup')
+              ),
+              h('div', { className: 'mt-3 grid gap-3 lg:grid-cols-2' },
+                h(Field, { label: 'OAuth Client ID' }, h(TextInput, {
+                  value: driveOauth.client_id,
+                  onChange: event => setDriveOauth(current => ({ ...current, client_id: event.target.value })),
+                  placeholder: '...apps.googleusercontent.com',
+                })),
+                h(Field, { label: 'OAuth Client Secret' }, h(TextInput, {
+                  type: 'password',
+                  value: driveOauth.client_secret,
+                  onChange: event => setDriveOauth(current => ({ ...current, client_secret: event.target.value })),
+                  placeholder: driveSummary.oauth_source === 'admin_runtime' ? 'Kosongkan untuk mempertahankan secret' : 'Masukkan client secret',
+                })),
+                h('div', { className: 'lg:col-span-2' },
+                  h(Field, { label: 'Authorized redirect URI' }, h(TextInput, {
+                    value: driveOauth.redirect_uri,
+                    onChange: event => setDriveOauth(current => ({ ...current, redirect_uri: event.target.value })),
+                    placeholder: apiUrl('google_drive_oauth.php'),
+                  }))
+                )
+              ),
+              h('div', { className: 'mt-3 flex flex-wrap items-center justify-between gap-3' },
+                h('p', { className: 'break-all text-xs font-bold text-indigo-800' }, `Daftarkan URI ini persis di Google Cloud: ${driveOauth.redirect_uri || apiUrl('google_drive_oauth.php')}`),
+                h(Button, {
+                  type: 'button',
+                  variant: 'blue',
+                  className: 'gap-2',
+                  disabled: driveLoading || !driveOauth.client_id.trim() || (!driveOauth.client_secret.trim() && driveSummary.oauth_source !== 'admin_runtime'),
+                  onClick: () => driveAction('save_oauth_config', null, {
+                    oauth_client_id: driveOauth.client_id.trim(),
+                    oauth_client_secret: driveOauth.client_secret,
+                    oauth_redirect_uri: driveOauth.redirect_uri.trim(),
+                  }),
+                }, h(Icon, { name: 'Save', size: 16 }), 'Simpan OAuth')
+              )
+            )
+          : null,
         h('div', { className: 'mt-4 grid gap-3 sm:grid-cols-3' },
           h(MiniMetric, { icon: 'Users', label: 'Akun terhubung', value: fullNumber(driveSummary?.account_count || 0) }),
           h(MiniMetric, { icon: 'HardDrive', label: 'Total kapasitas', value: driveSummary?.quota?.limit ? formatBytes(driveSummary.quota.limit) : '-' }),
@@ -6131,13 +6835,14 @@
         h('div', { className: 'mt-4 grid gap-3 lg:grid-cols-2' },
           (driveSummary?.accounts || []).map(account => {
             const quota = account.quota || {};
+            const reconnectRequired = !!account.reconnect_required;
             return h('article', { key: account.id, className: 'rounded-xl border border-slate-200 bg-slate-50 p-4' },
               h('div', { className: 'flex items-start justify-between gap-3' },
                 h('div', { className: 'min-w-0' },
                   h('strong', { className: 'block break-all text-sm font-black text-slate-950' }, account.email || account.display_name || 'Akun Google Drive'),
                   h('span', { className: 'mt-1 block text-xs font-bold text-slate-500' }, quota.limit ? `${formatBytes(quota.usage)} terpakai dari ${formatBytes(quota.limit)} (${fullNumber(quota.percent_used || 0)}%)` : `${formatBytes(quota.usage || 0)} terpakai; batas tidak dilaporkan Google`)
                 ),
-                h(Badge, { status: account.last_error ? 'failed' : account.enabled ? 'checked' : 'pending' }, account.last_error ? 'error' : account.enabled ? 'aktif' : 'nonaktif')
+                h(Badge, { status: reconnectRequired || account.last_error ? 'failed' : account.enabled ? 'checked' : 'pending' }, reconnectRequired ? 'hubungkan ulang' : account.last_error ? 'error' : account.enabled ? 'aktif' : 'nonaktif')
               ),
               account.last_error ? h('p', { className: 'mt-2 text-xs font-bold text-rose-600' }, account.last_error) : null,
               h('div', { className: 'mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]' },
@@ -6145,8 +6850,8 @@
                 h(Button, { type: 'button', variant: 'soft', className: 'gap-2', disabled: driveLoading, onClick: () => driveAction('update', account) }, h(Icon, { name: 'Save', size: 15 }), 'Simpan')
               ),
               h('div', { className: 'mt-3 flex flex-wrap gap-2' },
-                h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', disabled: driveLoading, onClick: () => driveAction('test_upload', account) }, h(Icon, { name: 'UploadCloud', size: 14 }), 'Uji upload'),
-                h(Button, { type: 'button', variant: account.enabled ? 'soft' : 'success', className: 'h-9 gap-2 px-3 text-xs', disabled: driveLoading, onClick: () => driveAction('update', account, { enabled: !account.enabled }) }, h(Icon, { name: account.enabled ? 'Pause' : 'Play', size: 14 }), account.enabled ? 'Nonaktifkan' : 'Aktifkan'),
+                h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', disabled: driveLoading || reconnectRequired, onClick: () => driveAction('test_upload', account) }, h(Icon, { name: 'UploadCloud', size: 14 }), 'Uji upload'),
+                h(Button, { type: 'button', variant: account.enabled ? 'soft' : 'success', className: 'h-9 gap-2 px-3 text-xs', disabled: driveLoading || reconnectRequired, onClick: () => driveAction('update', account, { enabled: !account.enabled }) }, h(Icon, { name: account.enabled ? 'Pause' : 'Play', size: 14 }), account.enabled ? 'Nonaktifkan' : 'Aktifkan'),
                 h(Button, { type: 'button', variant: 'danger', className: 'h-9 gap-2 px-3 text-xs', disabled: driveLoading, onClick: () => { if (window.confirm(`Lepas akun ${account.email || account.display_name || ''}?`)) driveAction('disconnect', account); } }, h(Icon, { name: 'Unplug', size: 14 }), 'Lepas')
               )
             );
