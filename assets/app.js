@@ -28,6 +28,11 @@
     ['doc_bnba_clear_padan', 'BNBA Clear Padan', 'TableProperties'],
     ['doc_ktp_kk_kpm', 'KTP dan KK Calon KPM', 'ContactRound'],
   ];
+  const PASK_PERIOD_OPTIONS = [
+    ['', 'Belum ditandai'],
+    ['2026', 'PASK 2026'],
+    ['before_2026', 'PASK sebelum 2026'],
+  ];
   const DEFAULT_ABOUT_HTML = `
     <h2>Project CPNS untuk kerja data KAT yang lebih tertata</h2>
     <p>Platform ini disiapkan sebagai ruang kerja operasional untuk membaca persebaran Komunitas Adat Terpencil, melakukan padan data BNBA, memantau hasil pengecekan, dan menyimpan arsip tautan kerja yang sudah dikurasi.</p>
@@ -161,6 +166,7 @@
     const query = currentQuery();
     if (shortCodeFromLocation()) return 'padan';
     if (query.get('admin') === '1') return 'admin';
+    if (query.get('documents') === '1') return 'documents';
     if (query.get('about') === '1') return 'about';
     if (query.get('archive') === '1' || query.get('links') === '1') return 'links';
     if (query.get('padan') === '1' || query.get('upload') === '1') return 'padan';
@@ -169,6 +175,7 @@
 
   function tabQuery(tab) {
     if (tab === 'admin') return '?admin=1';
+    if (tab === 'documents') return '?documents=1';
     if (tab === 'about') return '?about=1';
     if (tab === 'links') return '?links=1';
     if (tab === 'padan') return '?upload=1';
@@ -675,7 +682,27 @@
       distribution_households_total: 'KK by Excel',
       bnba_households_total: 'KK by padan',
       is_proposed: 'Pengusulan',
+      pask_period: 'Penanda PASK',
       notes: 'Catatan',
+      documents_folder_url: 'Link folder dokumen',
+      doc_surat_usulan_kadis: 'Surat Usulan Kadis',
+      doc_surat_usulan_kadis_url: 'Link Surat Usulan Kadis',
+      doc_rekomendasi_bupati: 'Rekomendasi Bupati',
+      doc_rekomendasi_bupati_url: 'Link Rekomendasi Bupati',
+      doc_pemetaan_sosial: 'Hasil Pemetaan Sosial',
+      doc_pemetaan_sosial_url: 'Link Hasil Pemetaan Sosial',
+      doc_bnba_pusdatin: 'BNBA Format Pusdatin',
+      doc_bnba_pusdatin_url: 'Link BNBA Format Pusdatin',
+      doc_status_lahan: 'Status Kawasan Lahan',
+      doc_status_lahan_url: 'Link Status Kawasan Lahan',
+      doc_instrumen_skoring_pa: 'Instrumen Skoring PA',
+      doc_instrumen_skoring_pa_url: 'Link Instrumen Skoring PA',
+      doc_laporan_studi_kelayakan: 'Laporan Studi Kelayakan',
+      doc_laporan_studi_kelayakan_url: 'Link Laporan Studi Kelayakan',
+      doc_bnba_clear_padan: 'BNBA Clear Padan',
+      doc_bnba_clear_padan_url: 'Link BNBA Clear Padan',
+      doc_ktp_kk_kpm: 'KTP dan KK Calon KPM',
+      doc_ktp_kk_kpm_url: 'Link KTP dan KK Calon KPM',
       row_hash: 'Hash baris',
     };
     const key = String(column || '');
@@ -974,7 +1001,7 @@
     };
   }
 
-  function Button({ children, variant = 'primary', className, ...props }) {
+  function Button({ children, variant = 'primary', className, iconOnly = false, ...props }) {
     const variants = {
       primary: 'bg-slate-950 text-white hover:bg-slate-800 disabled:bg-slate-300 shadow-sm',
       blue: 'bg-blue-600 text-white font-extrabold hover:bg-blue-700 disabled:bg-blue-200 shadow-sm',
@@ -985,13 +1012,22 @@
       soft: 'bg-white text-slate-800 font-extrabold ring-1 ring-slate-300 hover:bg-slate-100 disabled:text-slate-300 shadow-xs',
       ghost: 'bg-transparent text-slate-700 font-extrabold hover:bg-slate-100',
     };
+    const isIconOnly = Boolean(iconOnly || props['data-icon-only'] === true || props['data-icon-only'] === 'true' || /\bicon-only\b/.test(className || ''));
     const compact = /\bh-(8|9)\b/.test(className || '');
+    const buttonChildren = Array.isArray(children)
+      ? children.map((child, index) => (typeof child === 'string' || typeof child === 'number')
+        ? h('span', { key: `button-label-${index}`, className: 'ui-button-label' }, child)
+        : child)
+      : (typeof children === 'string' || typeof children === 'number')
+        ? h('span', { className: 'ui-button-label' }, children)
+        : children;
     return h('button', {
       ...props,
       'data-ui-button': '',
+      'data-button-kind': isIconOnly ? 'icon' : 'command',
       'data-button-variant': variant,
-      className: cx('ui-button inline-flex h-11 items-center justify-center rounded-2xl px-5 text-xs font-black transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-purple-200 disabled:cursor-not-allowed cursor-pointer', compact && 'ui-button--compact', variants[variant] || variants.primary, className),
-    }, children);
+      className: cx('ui-button inline-flex h-11 items-center justify-center rounded-2xl px-5 text-xs font-black transition-all duration-150 focus:outline-none focus:ring-4 focus:ring-purple-200 disabled:cursor-not-allowed cursor-pointer', !isIconOnly && 'ui-button--command', compact && 'ui-button--compact', variants[variant] || variants.primary, className),
+    }, buttonChildren);
   }
 
   function TextInput(props) {
@@ -1285,6 +1321,32 @@
       slate: 'bg-slate-100 text-slate-700 ring-slate-200',
     };
     return h('span', { className: cx('inline-flex items-center rounded-full px-2.5 py-1 text-xs font-black ring-1', tones[status] || tones.slate) }, children);
+  }
+
+  function LocationVisualBadge({ type, visual, children }) {
+    const meta = visual?.[type];
+    if (!meta) return null;
+    return h('span', {
+      className: cx('location-visual-badge', `location-visual-badge-${type}`, meta.className),
+      title: meta.label,
+      'aria-label': meta.label,
+    },
+      h('span', { className: 'location-visual-badge-mark', 'aria-hidden': 'true' }),
+      children || meta.label
+    );
+  }
+
+  function paskPeriodLabel(value) {
+    return PASK_PERIOD_OPTIONS.find(([key]) => key === String(value || ''))?.[1] || 'Belum ditandai';
+  }
+
+  function PaskBadge({ value, compact = false }) {
+    const key = String(value || '');
+    return h('span', {
+      className: cx('pask-badge', key === '2026' ? 'is-pask-2026' : key === 'before_2026' ? 'is-pask-before' : 'is-pask-unmarked'),
+      title: paskPeriodLabel(key),
+      'aria-label': `Penanda PASK: ${paskPeriodLabel(key)}`,
+    }, compact && !key ? 'PASK belum ditandai' : (compact ? paskPeriodLabel(key) : `PASK: ${paskPeriodLabel(key)}`));
   }
 
   function Modal({ title, children, onClose }) {
@@ -1586,7 +1648,7 @@
             backgroundColor: '#f8fafc'
           }
         },
-          h('div', { style: { minWidth: '1980px', borderRadius: '1rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' } },
+          h('div', { style: { minWidth: '2080px', borderRadius: '1rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' } },
             h('table', { style: { width: '100%', textAlign: 'left', fontSize: '0.75rem', borderCollapse: 'collapse' } },
               h('thead', { style: { backgroundColor: '#f1f5f9', color: '#0f172a', fontWeight: 900, textTransform: 'uppercase', fontSize: '0.7rem', borderBottom: '1.5px solid #cbd5e1' } },
                 h('tr', null,
@@ -1602,6 +1664,7 @@
                   h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '110px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'KK Perseb.'),
                   h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '110px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'KK Total'),
                   h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '110px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Tahun'),
+                  h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '150px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Penanda PASK'),
                   h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '95px', textAlign: 'center', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Usulan'),
                   h('th', { style: { padding: '0.85rem 0.75rem', minWidth: '160px', borderRight: '1px solid #e2e8f0', whiteSpace: 'nowrap' } }, 'Catatan'),
                   h('th', { style: { padding: '0.85rem 0.6rem', minWidth: '80px', textAlign: 'center', whiteSpace: 'nowrap' } }, 'Aksi')
@@ -1648,11 +1711,12 @@
                     h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'number', min: '0', style: { width: '100%', height: '2.5rem', borderRadius: '0.65rem', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', padding: '0 0.5rem', fontSize: '0.78rem', textAlign: 'center', fontWeight: 900, color: '#0f172a' }, value: row.households_spread ?? '', onChange: e => onUpdateField(idx, 'households_spread', e.target.value ? parseInt(e.target.value, 10) : null) })),
                     h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'number', min: '0', style: { width: '100%', height: '2.5rem', borderRadius: '0.65rem', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', padding: '0 0.5rem', fontSize: '0.78rem', textAlign: 'center', fontWeight: 900, color: '#0f172a' }, value: row.households_total ?? '', onChange: e => onUpdateField(idx, 'households_total', e.target.value ? parseInt(e.target.value, 10) : null) })),
                     h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'number', min: '1900', style: { width: '100%', height: '2.5rem', borderRadius: '0.65rem', border: '1.5px solid #cbd5e1', backgroundColor: '#ffffff', padding: '0 0.5rem', fontSize: '0.78rem', textAlign: 'center', fontWeight: 900, color: '#0f172a' }, value: row.data_year ?? '', onChange: e => onUpdateField(idx, 'data_year', e.target.value ? parseInt(e.target.value, 10) : null) })),
+                    h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h(SelectInput, { value: row.pask_period || '', onChange: e => onUpdateField(idx, 'pask_period', e.target.value), className: 'w-full text-xs font-bold' }, PASK_PERIOD_OPTIONS.map(([value, optionLabel]) => h('option', { key: value, value }, optionLabel)))),
                     h('td', { style: { padding: '0.4rem 0.5rem', textAlign: 'center', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'checkbox', style: { width: '1.35rem', height: '1.35rem', cursor: 'pointer', accentColor: '#6d28d9' }, checked: Boolean(row.is_proposed), onChange: e => onUpdateField(idx, 'is_proposed', e.target.checked ? 1 : 0) })),
                     h('td', { style: { padding: '0.4rem 0.5rem', borderRight: '1px solid #f1f5f9' } }, h('input', { type: 'text', className: 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 shadow-2xs focus:border-purple-600 focus:ring-4 focus:ring-purple-100 focus:outline-none transition-all', value: row.notes || '', onChange: e => onUpdateField(idx, 'notes', e.target.value), placeholder: 'Catatan' })),
                     h('td', { style: { padding: '0.4rem 0.5rem', textAlign: 'center' } }, h('button', { type: 'button', onClick: () => onRemoveRow(idx), style: { display: 'grid', placeItems: 'center', width: '2.5rem', height: '2.5rem', borderRadius: '0.75rem', color: '#dc2626', backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', cursor: 'pointer', margin: '0 auto' }, title: 'Hapus baris' }, h(Icon, { name: 'Trash2', size: 16 })))
                   )
-                ) : h('tr', null, h('td', { colSpan: 15, style: { padding: '4rem 1rem', textAlign: 'center', fontWeight: 900, color: '#94a3b8', fontSize: '0.85rem' } }, 'Belum ada baris data. Klik "+ Tambah Baris Manual" di bawah untuk menambah.'))
+                ) : h('tr', null, h('td', { colSpan: 16, style: { padding: '4rem 1rem', textAlign: 'center', fontWeight: 900, color: '#94a3b8', fontSize: '0.85rem' } }, 'Belum ada baris data. Klik "+ Tambah Baris Manual" di bawah untuk menambah.'))
               )
             )
           ),
@@ -2109,7 +2173,7 @@
     );
   }
 
-  function PreviewTable({ rows, maxHeight = 420 }) {
+  function PreviewTable({ rows, maxHeight = 420, onUpdatePask = null }) {
     const columns = useMemo(() => {
       if (!rows?.length) return [];
       const seen = new Set();
@@ -2123,6 +2187,7 @@
       const priority = [
         'source_data', 'SUMBER DATA',
         'data_year', 'TAHUN DATA MASUK',
+        'pask_period', 'PENANDA PASK', 'PASK', 'TAHUN PASK',
         'province', 'PROVINSI',
         'regency', 'KABUPATEN',
         'region_code', 'KODE WILAYAH',
@@ -2138,7 +2203,7 @@
         'name', 'NAMA',
         'address', 'ALAMAT',
       ].map(normalizeName);
-      return all
+      const ordered = all
         .filter(column => !/^column\d+$/i.test(String(column)) || rows.some(row => !['', null, undefined, true, 'True', 'TRUE'].includes(row?.[column])))
         .sort((a, b) => {
           const ia = priority.indexOf(normalizeName(a));
@@ -2148,7 +2213,11 @@
           if (ib === -1) return -1;
           return ia - ib;
         });
-    }, [rows]);
+      if (onUpdatePask && !ordered.some(column => String(column).replace(/[^A-Za-z0-9]/g, '').toUpperCase() === 'PASKPERIOD')) {
+        return ['pask_period', ...ordered];
+      }
+      return ordered;
+    }, [rows, Boolean(onUpdatePask)]);
     if (!rows?.length) {
       return h('div', { className: 'rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm font-semibold text-slate-500' }, 'Preview belum tersedia.');
     }
@@ -2165,7 +2234,9 @@
           h('tbody', null, rows.map((row, idx) =>
             h('tr', { key: idx, className: idx % 2 ? 'bg-slate-50' : 'bg-white' },
               columns.map(column => h('td', { key: column, title: String(row[column] ?? ''), className: 'border-r border-b border-slate-100 px-3 py-2 text-slate-700' },
-                h('span', { className: 'preview-cell' }, String(row[column] ?? ''))
+                onUpdatePask && ['PASKPERIOD', 'PENANDAPASK', 'PASK', 'TAHUNPASK'].includes(String(column).replace(/[^A-Za-z0-9]/g, '').toUpperCase())
+                  ? h(SelectInput, { value: row[column] || '', onChange: event => onUpdatePask(idx, event.target.value), className: 'min-w-[9rem] text-xs font-bold' }, PASK_PERIOD_OPTIONS.map(([value, optionLabel]) => h('option', { key: value, value }, optionLabel)))
+                  : h('span', { className: 'preview-cell' }, String(row[column] ?? ''))
               ))
             )
           ))
@@ -2298,7 +2369,7 @@
   }
 
   function MiniMetric({ icon = 'Info', label, value }) {
-    return h('div', { className: 'rounded-xl bg-white/85 p-3 ring-1 ring-slate-100' },
+    return h('div', { className: 'mini-metric rounded-xl bg-white/85 p-3 ring-1 ring-slate-100' },
       h('div', { className: 'flex items-center gap-2 text-slate-500' },
         h(Icon, { name: icon, size: 14 }),
         h('span', { className: 'text-[0.68rem] font-black uppercase' }, label)
@@ -2373,6 +2444,21 @@
     ].join('|');
   }
 
+  function locationItemIdentity(item = {}) {
+    return [
+      item.distribution_id || item.id || '',
+      item.type || '',
+      item.job_id || '',
+      item.region_code || '',
+      item.title || '',
+      item.province || '',
+      item.regency || '',
+      item.district || '',
+      item.village || '',
+      item.location || '',
+    ].join('|');
+  }
+
   function regionSeedFromItem(item = {}) {
     return {
       province: item.province || '',
@@ -2409,6 +2495,134 @@
     };
   }
 
+  function distributionDocumentVisual(record = {}) {
+    const summary = distributionDocumentSummary(record);
+    const ratio = summary.total ? `${summary.complete}/${summary.total}` : '0/9';
+    if (summary.complete >= summary.total) {
+      return {
+        key: 'complete',
+        label: `${ratio} dokumen lengkap`,
+        shortLabel: ratio,
+        className: 'is-document-complete',
+        color: '#16a34a',
+      };
+    }
+    if (summary.complete > 0) {
+      return {
+        key: 'partial',
+        label: `${ratio} dokumen lengkap`,
+        shortLabel: ratio,
+        className: 'is-document-partial',
+        color: '#d97706',
+      };
+    }
+    return {
+      key: 'empty',
+      label: `${ratio} dokumen lengkap`,
+      shortLabel: ratio,
+      className: 'is-document-empty',
+      color: '#64748b',
+    };
+  }
+
+  function distributionSourceVisual(record = {}) {
+    const source = String(record.source_data || '').trim();
+    if (/pengusul|usulan|proposal/i.test(source)) {
+      return {
+        key: 'proposal',
+        label: 'pengusulan',
+        className: 'is-source-proposal',
+        color: '#7c3aed',
+        dashArray: '5 3',
+      };
+    }
+    if (/persebaran|distribution|data kat|excel/i.test(source)) {
+      return {
+        key: 'distribution',
+        label: 'persebaran',
+        className: 'is-source-distribution',
+        color: '#0f766e',
+        dashArray: null,
+      };
+    }
+    if (/^\s*(tanpa sumber|unknown|tidak diketahui)\s*$/i.test(source)) {
+      return {
+        key: 'unknown',
+        label: 'sumber tidak diketahui',
+        className: 'is-source-unknown',
+        color: '#64748b',
+        dashArray: '2 3',
+      };
+    }
+    if (Boolean(Number(record.is_proposed || 0))) {
+      return {
+        key: 'proposal',
+        label: 'pengusulan',
+        className: 'is-source-proposal',
+        color: '#7c3aed',
+        dashArray: '5 3',
+      };
+    }
+    if (record.type === 'distribution') {
+      return {
+        key: 'distribution',
+        label: 'persebaran',
+        className: 'is-source-distribution',
+        color: '#0f766e',
+        dashArray: null,
+      };
+    }
+    return {
+      key: 'unknown',
+      label: 'sumber tidak diketahui',
+      className: 'is-source-unknown',
+      color: '#64748b',
+      dashArray: '2 3',
+    };
+  }
+
+  function locationVisualMeta(record = {}) {
+    const documents = distributionDocumentVisual(record);
+    const source = distributionSourceVisual(record);
+    return {
+      documents,
+      source,
+      className: `${documents.className} ${source.className}`,
+      label: `${documents.label}; sumber ${source.label}`,
+    };
+  }
+
+  function locationCoordinates(record = {}) {
+    const geometryCoordinates = record.geometry?.coordinates;
+    if (Array.isArray(geometryCoordinates) && geometryCoordinates.length >= 2) {
+      const lng = Number(geometryCoordinates[0]);
+      const lat = Number(geometryCoordinates[1]);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return [lat, lng];
+    }
+    const geoPair = record.coordinates;
+    if (Array.isArray(geoPair) && geoPair.length >= 2) {
+      const lat = Number(geoPair[1]);
+      const lng = Number(geoPair[0]);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return [lat, lng];
+    }
+    const latLngPair = record.coordinate || record.latlng;
+    if (Array.isArray(latLngPair) && latLngPair.length >= 2) {
+      const lat = Number(latLngPair[0]);
+      const lng = Number(latLngPair[1]);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return [lat, lng];
+    }
+    const lat = Number(record.latitude ?? record.lat ?? record.latitude_deg ?? record.lat_coord);
+    const lng = Number(record.longitude ?? record.lng ?? record.lon ?? record.longitude_deg ?? record.lng_coord);
+    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? [lat, lng] : null;
+  }
+
+  function documentAggregateState(stats = {}) {
+    const locations = Number(stats.locations || 0);
+    const nonzero = Number(stats.document_locations_nonzero || 0);
+    if (!locations || !nonzero) return 'empty';
+    return nonzero === locations && Number(stats.document_locations_complete || 0) === locations ? 'complete' : 'partial';
+  }
+
   function distributionRecordFromMapItem(item = {}) {
     const record = { ...item };
     const summary = distributionDocumentSummary(item);
@@ -2420,18 +2634,18 @@
     return record;
   }
 
-  function DistributionDocumentChecklist({ value = {}, onChange = null, editable = false }) {
+  function DistributionDocumentChecklist({ value = {}, onChange = null, editable = false, showHead = true }) {
     const summary = distributionDocumentSummary(value);
     const setValue = (key, nextValue) => onChange?.(key, nextValue);
     return h('section', { className: cx('distribution-document-checklist', editable && 'is-editable') },
-      h('div', { className: 'distribution-document-head' },
+      showHead ? h('div', { className: 'distribution-document-head' },
         h('div', { className: 'min-w-0' },
           h('p', { className: 'distribution-document-kicker' }, h(Icon, { name: 'FolderCheck', size: 14 }), 'Kelengkapan dokumen usulan'),
           h('strong', null, `${summary.complete} dari ${summary.total} lengkap`),
           h('small', null, `${summary.linked} item memiliki tautan bukti`)
         ),
         h('span', { className: cx('distribution-document-score', summary.complete === summary.total && 'is-complete') }, `${summary.complete}/${summary.total}`)
-      ),
+      ) : null,
       editable ? h(Field, { label: 'Link folder dokumen kabupaten/lokasi' },
         h(TextInput, {
           value: summary.folderUrl,
@@ -2499,7 +2713,13 @@
     const hasBnba = Boolean(bnba.has_bnba || Number(bnba.kk_unique || 0) > 0 || Number(bnba.checked_rows || 0) > 0);
     const households = householdMetrics(item);
     const adminKey = localStorage.getItem('admin_key') || '';
-    const canEditDocuments = Boolean(adminKey && Number(item.distribution_id || 0) > 0);
+    const distributionId = Number(item.distribution_id || item.id || 0);
+    const documentSummary = distributionDocumentSummary(item);
+    const locationVisual = locationVisualMeta(item);
+    const canEditDocuments = Boolean(adminKey && distributionId > 0);
+    const documentEditState = adminKey
+      ? (distributionId > 0 ? 'ready' : 'missing-id')
+      : 'login';
     const setDocumentValue = (key, value) => setDocumentDraft(current => ({ ...current, [key]: value }));
     const cancelDocumentEdit = () => {
       setDocumentDraft(distributionRecordFromMapItem(item));
@@ -2521,13 +2741,13 @@
         const result = await apiRequest('distribution.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
-          body: JSON.stringify({ action: 'save_documents', id: item.distribution_id, documents: documentDraft }),
+          body: JSON.stringify({ action: 'save_documents', id: distributionId, documents: documentDraft }),
         });
         const savedRow = result.row || {};
         const updatedItem = {
           ...item,
           ...savedRow,
-          distribution_id: Number(savedRow.id || item.distribution_id),
+          distribution_id: Number(savedRow.id || distributionId),
           community_name: savedRow.tribe || item.community_name,
           documents: savedRow.documents || distributionDocumentSummary(documentDraft).items,
         };
@@ -2544,7 +2764,8 @@
         setDocumentsSaving(false);
       }
     };
-    return h('section', { className: 'location-detail-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm' },
+    return h('div', { className: 'location-detail-workspace' },
+      h('section', { className: 'location-summary-panel location-detail-panel' },
       h('div', { className: 'flex items-start justify-between gap-3' },
         h('div', { className: 'min-w-0' },
           h('p', { className: 'flex items-center gap-2 text-xs font-black uppercase text-slate-500' }, h(Icon, { name: 'MapPinned', size: 14 }), 'Detail lokasi'),
@@ -2555,7 +2776,7 @@
           h(Icon, { name: 'X', size: 17 })
         )
       ),
-      item.address ? h('p', { className: 'mt-3 rounded-xl bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-600' }, item.address) : null,
+      item.address ? h('p', { className: 'location-detail-address mt-3 rounded-xl bg-slate-50 p-3 text-xs font-semibold leading-5 text-slate-600' }, item.address) : null,
       h('div', { className: 'location-fields mt-3 grid grid-cols-2 gap-2 text-xs' },
         h(LocationField, { icon: 'Map', label: 'Provinsi', value: item.province }),
         h(LocationField, { icon: 'Landmark', label: 'Kabupaten/Kota', value: item.regency }),
@@ -2577,27 +2798,45 @@
         hasBnba ? h(MiniMetric, { icon: 'CopyCheck', label: 'KK unik/duplikat', value: `${fullNumber(bnba.kk_unique || 0)} / ${fullNumber(bnba.kk_duplicate || 0)}` }) : null
       ),
       h('div', { className: 'mt-3 flex flex-wrap gap-2 bg-transparent' },
+        h(PaskBadge, { value: item.pask_period }),
+        h(LocationVisualBadge, { type: 'documents', visual: locationVisual }),
+        h(LocationVisualBadge, { type: 'source', visual: locationVisual }),
         item.community_name ? h(Badge, { status: 'slate' }, item.community_name) : null,
         item.status ? h(Badge, { status: item.status }, item.status) : null,
         hasBnba ? h(Badge, { status: 'checked' }, 'ada data BNBA') : null,
         bnba.fix_status ? h(Badge, { status: bnba.fix_status }, bnba.fix_status === 'approved' ? 'fix disetujui' : 'fix menunggu') : null,
         item.updated_at || item.checked_at || item.uploaded_at ? h(Badge, { status: 'processing' }, formatDateTime(item.updated_at || item.checked_at || item.uploaded_at)) : null
       ),
-      h('div', { className: 'mt-3 grid gap-2' },
-        canEditDocuments ? h('div', { className: 'flex items-center justify-end gap-2' },
-          documentsEditing ? h(React.Fragment, null,
-            h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', onClick: cancelDocumentEdit, disabled: documentsSaving }, h(Icon, { name: 'X', size: 14 }), 'Batal'),
-            h(Button, { type: 'button', variant: 'success', className: 'h-9 gap-2 px-3 text-xs', onClick: saveDocuments, disabled: documentsSaving }, h(Icon, { name: documentsSaving ? 'LoaderCircle' : 'Save', size: 14 }), documentsSaving ? 'Menyimpan' : 'Simpan')
-          ) : h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', onClick: () => setDocumentsEditing(true) }, h(Icon, { name: 'Pencil', size: 14 }), 'Edit dokumen')
-        ) : null,
-        documentsMessage ? h(Notice, { message: documentsMessage }) : null,
-        h(DistributionDocumentChecklist, { value: documentsEditing ? documentDraft : item, editable: documentsEditing, onChange: setDocumentValue })
-      ),
       h('div', { className: 'mt-3' },
         h(Button, { type: 'button', variant: 'blue', className: 'w-full gap-2', onClick: () => onStartPadan?.(item) },
           h(Icon, { name: 'UploadCloud', size: 16 }),
           'Padankan lokasi ini'
         )
+      )
+      ),
+      h('section', { className: 'location-documents-panel distribution-document-surface' },
+      h('div', { className: 'location-documents-panel-head' },
+        h('div', { className: 'min-w-0' },
+          h('p', { className: 'distribution-document-kicker' }, h(Icon, { name: 'FolderCheck', size: 14 }), 'Kelengkapan dokumen usulan'),
+          h('strong', null, `${documentSummary.complete} dari ${documentSummary.total} lengkap`),
+          h('small', null, `${documentSummary.linked} item memiliki tautan bukti`)
+        ),
+        canEditDocuments ? h('div', { className: 'location-documents-panel-actions' },
+          documentsEditing ? h(React.Fragment, null,
+            h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', onClick: cancelDocumentEdit, disabled: documentsSaving }, h(Icon, { name: 'X', size: 14 }), 'Batal'),
+            h(Button, { type: 'button', variant: 'success', className: 'h-9 gap-2 px-3 text-xs', onClick: saveDocuments, disabled: documentsSaving }, h(Icon, { name: documentsSaving ? 'LoaderCircle' : 'Save', size: 14 }), documentsSaving ? 'Menyimpan' : 'Simpan')
+          ) : h(Button, { type: 'button', variant: 'soft', className: 'h-9 gap-2 px-3 text-xs', onClick: () => setDocumentsEditing(true) }, h(Icon, { name: 'Pencil', size: 14 }), 'Edit dokumen')
+        ) : h('button', {
+          type: 'button',
+          className: 'document-edit-unavailable',
+          disabled: true,
+          title: documentEditState === 'missing-id' ? 'Data lokasi belum memiliki ID' : 'Login admin untuk mengedit dokumen',
+        }, h(Icon, { name: documentEditState === 'missing-id' ? 'CircleAlert' : 'LockKeyhole', size: 14 }), documentEditState === 'missing-id' ? 'Data lokasi belum memiliki ID' : 'Login admin untuk mengedit')
+      ),
+      h('div', { className: 'location-documents-panel-body' },
+        documentsMessage ? h(Notice, { message: documentsMessage }) : null,
+        h(DistributionDocumentChecklist, { value: documentsEditing ? documentDraft : item, editable: documentsEditing, showHead: false, onChange: setDocumentValue })
+      )
       )
     );
   }
@@ -2854,7 +3093,8 @@
       h('div', { className: 'link-card-meta' },
         h(LinkProcessChip, { process: link.process_context }),
         link.is_pinned ? h(Badge, { status: 'pinned' }, 'pinned') : null,
-        admin ? h(Badge, { status }, status) : null
+        admin ? h(Badge, { status }, status) : null,
+        admin && link.pending_sync ? h(Badge, { status: 'pending' }, 'menunggu sinkronisasi Sheets') : null
       ),
       admin ? h('div', { className: 'link-card-audit' },
         h('span', null, `Diajukan ${formatDateTime(link.created_at)}`),
@@ -3078,15 +3318,157 @@
     );
   }
 
+  function DocumentsDashboardPage({ onOpenPdfImport }) {
+    const [data, setData] = useState({ summary: {}, items: [] });
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [loading, setLoading] = useState(true);
+    const [message, setMessage] = useState(null);
+
+    async function loadDocuments() {
+      setLoading(true);
+      setMessage(null);
+      try {
+        setData(normalizeMapDataPayload(await apiRequest('map_data.php?limit=500')));
+      } catch (error) {
+        setMessage({ type: 'error', text: error.message });
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    useEffect(() => { loadDocuments(); }, []);
+
+    const documentRows = useMemo(() => (data.items || []).map((item, index) => {
+      const documents = distributionDocumentSummary(item);
+      const status = documents.complete >= documents.total ? 'complete' : documents.complete > 0 ? 'started' : 'empty';
+      return { ...item, __documentIndex: index, __documents: documents, __documentStatus: status };
+    }), [data.items]);
+
+    const totals = useMemo(() => documentRows.reduce((acc, row) => {
+      acc.locations += 1;
+      acc[row.__documentStatus] += 1;
+      acc.items += row.__documents.complete;
+      acc.links += row.__documents.linked + (row.__documents.folderUrl ? 1 : 0);
+      return acc;
+    }, { locations: 0, empty: 0, started: 0, complete: 0, items: 0, links: 0 }), [documentRows]);
+
+    const filteredRows = useMemo(() => {
+      const needle = normalizeName(search);
+      return documentRows.filter(row => {
+        if (statusFilter !== 'all' && row.__documentStatus !== statusFilter) return false;
+        if (!needle) return true;
+        return normalizeName([
+          row.title,
+          row.community_name,
+          row.location,
+          row.village,
+          row.district,
+          row.regency,
+          row.province,
+          row.source_data,
+        ].filter(Boolean).join(' ')).includes(needle);
+      });
+    }, [documentRows, search, statusFilter]);
+
+    const statusOptions = [
+      ['all', 'Semua status'],
+      ['started', 'Mulai dilengkapi (1-8/9)'],
+      ['complete', 'Lengkap (9/9)'],
+      ['empty', 'Belum ada (0/9)'],
+    ];
+    const statRows = [
+      ['Total lokasi', totals.locations, 'MapPinned', 'slate'],
+      ['Belum ada', totals.empty, 'CircleSlash', 'slate'],
+      ['Mulai dilengkapi', totals.started, 'Files', 'amber'],
+      ['Lengkap', totals.complete, 'FolderCheck', 'emerald'],
+      ['Item terpenuhi', totals.items, 'ListChecks', 'blue'],
+      ['Tautan bukti', totals.links, 'Link2', 'violet'],
+    ];
+
+    return h('main', { className: 'documents-dashboard' },
+      h('section', { className: 'documents-dashboard-head' },
+        h('div', { className: 'documents-dashboard-copy' },
+          h('p', { className: 'section-kicker' }, 'Kelengkapan dokumen lokasi'),
+          h('h2', { className: 'section-title' }, 'Dashboard Dokumen KAT'),
+          h('p', { className: 'documents-dashboard-description' }, 'Pantau progres sembilan dokumen wajib per lokasi, buka bukti yang tersedia, dan lanjutkan scan PDF dari panel admin.')
+        ),
+        h('div', { className: 'documents-dashboard-actions' },
+          h(Button, { type: 'button', variant: 'soft', className: 'gap-2', disabled: loading, onClick: loadDocuments }, h(Icon, { name: loading ? 'LoaderCircle' : 'RefreshCcw', size: 16 }), loading ? 'Memuat...' : 'Muat ulang'),
+          h(Button, { type: 'button', variant: 'purple', className: 'gap-2', onClick: onOpenPdfImport }, h(Icon, { name: 'ScanSearch', size: 16 }), 'Import PDF (Admin)')
+        )
+      ),
+      h(Notice, { message }),
+      h('section', { className: 'documents-summary-grid', 'aria-label': 'Ringkasan dokumen' },
+        statRows.map(([label, value, icon, tone]) => h('article', { key: label, className: cx('documents-summary-item', `tone-${tone}`) },
+          h('span', { className: 'documents-summary-icon' }, h(Icon, { name: icon, size: 17 })),
+          h('span', { className: 'documents-summary-label' }, label),
+          h('strong', null, fullNumber(value))
+        ))
+      ),
+      h('section', { className: 'documents-location-workspace' },
+        h('div', { className: 'documents-toolbar' },
+          h('label', { className: 'documents-search-field' },
+            h('span', null, 'Cari lokasi atau sumber'),
+            h(TextInput, { value: search, onChange: event => setSearch(event.target.value), placeholder: 'Provinsi, kabupaten, komunitas, lokasi...' })
+          ),
+          h('label', { className: 'documents-status-field' },
+            h('span', null, 'Status dokumen'),
+            h(SelectInput, { value: statusFilter, onChange: event => setStatusFilter(event.target.value), 'aria-label': 'Filter status dokumen' },
+              statusOptions.map(([value, label]) => h('option', { key: value, value }, label))
+            )
+          ),
+          h('span', { className: 'documents-result-count', 'aria-live': 'polite' }, `${fullNumber(filteredRows.length)} lokasi tampil`)
+        ),
+        h('div', { className: 'documents-list-heading', 'aria-hidden': 'true' },
+          h('span', null, 'Lokasi'),
+          h('span', null, 'Status'),
+          h('span', null, 'Sumber'),
+          h('span', null, 'Bukti tersedia')
+        ),
+        h('div', { className: 'documents-location-list' },
+          loading ? h('div', { className: 'documents-empty-state' }, 'Memuat data dokumen...') :
+            filteredRows.length ? filteredRows.map(row => {
+              const documents = row.__documents;
+              const ratio = `${documents.complete}/${documents.total}`;
+              const title = row.title || row.community_name || row.location || row.village || 'Lokasi KAT';
+              const route = [row.location, row.village, row.district, row.regency, row.province].filter(Boolean).join(' / ');
+              const evidenceLinks = [
+                documents.folderUrl ? { key: 'folder', label: 'Folder dokumen', url: documents.folderUrl, icon: 'FolderOpen' } : null,
+                ...documents.items.filter(item => item.url).map(item => ({ key: item.key, label: item.label, url: item.url, icon: item.icon })),
+              ].filter(Boolean);
+              return h('article', { key: `${row.distribution_id || row.id || row.__documentIndex}`, className: cx('documents-location-row', `is-${row.__documentStatus}`) },
+                h('div', { className: 'documents-location-main' },
+                  h('strong', { title }, title),
+                  h('span', { title: route }, route || 'Wilayah belum lengkap')
+                ),
+                h('div', { className: 'documents-location-status' },
+                  h('span', { className: 'documents-ratio-badge', title: `${ratio} dokumen lengkap` }, ratio),
+                  h('small', null, row.__documentStatus === 'complete' ? 'Lengkap' : row.__documentStatus === 'started' ? 'Mulai dilengkapi' : 'Belum ada')
+                ),
+                h('span', { className: 'documents-location-source', title: row.source_data || 'Tanpa sumber' }, row.source_data || 'Tanpa sumber'),
+                h('div', { className: 'documents-evidence-links' },
+                  evidenceLinks.length ? evidenceLinks.map(link => h('a', { key: link.key, href: link.url, target: '_blank', rel: 'noopener noreferrer', title: `Buka ${link.label}` }, h(Icon, { name: link.icon || 'Link2', size: 14 }), h('span', null, link.label))) : h('span', { className: 'documents-no-evidence' }, 'Belum ada link')
+                )
+              );
+            }) : h('div', { className: 'documents-empty-state' }, 'Tidak ada lokasi yang cocok dengan filter ini.')
+        )
+      )
+    );
+  }
+
   function HomeMap({ appConfig, onOpenArchive, onStartPadan }) {
     const mapRef = useRef(null);
     const mapBoxRef = useRef(null);
     const layerRef = useRef(null);
+    const locationMarkerLayerRef = useRef(null);
     const popupRef = useRef(null);
     const queryRef = useRef('');
     const dataRequestSeqRef = useRef(0);
     const drillRequestSeqRef = useRef(0);
     const mapRequestSeqRef = useRef(0);
+    const globalMapDataRef = useRef(Object.create(null));
+    const globalMapRequestRef = useRef({ key: '', seq: 0, pending: false });
     const mapBusyRef = useRef(false);
     const pendingSelectionKeyRef = useRef('');
     const [query, setQuery] = useState('');
@@ -3100,12 +3482,15 @@
     const [drillOptions, setDrillOptions] = useState([]);
     const [drillLoading, setDrillLoading] = useState(false);
     const [selectedSource, setSelectedSource] = useState('');
+    const [documentFilter, setDocumentFilter] = useState('all');
+    const [sourceTypeFilter, setSourceTypeFilter] = useState('all');
     const [selectedItem, setSelectedItem] = useState(null);
     const [statDetailKey, setStatDetailKey] = useState('');
     const [data, setData] = useState({ summary: {}, province_stats: [], source_breakdown: [], breakdowns: {}, items: [] });
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState(null);
     const [proposalModalOpen, setProposalModalOpen] = useState(false);
+    const items = useMemo(() => (data.items || []).filter(itemMatchesMapClientFilters), [data.items, documentFilter, sourceTypeFilter]);
 
     useEffect(() => { queryRef.current = query; }, [query]);
 
@@ -3263,6 +3648,20 @@
       return '';
     }
 
+    function mapViewKey(level, scope = {}) {
+      return [
+        level,
+        scope.province || '',
+        scope.province_code || '',
+        scope.regency || '',
+        scope.regency_code || '',
+        scope.district || '',
+        scope.district_code || '',
+        scope.village || '',
+        scope.village_code || '',
+      ].map(value => normalizeName(value)).join('|');
+    }
+
     function scopeForLevel(level, name, base = selectedRegion, meta = {}) {
       const next = { ...base, [level]: name };
       const code = String(meta.code || '').replace(/\D+/g, '');
@@ -3296,8 +3695,19 @@
       return next;
     }
 
-    function statsForScope(scope) {
-      const rows = (data.items || []).filter(item => {
+    function itemMatchesMapClientFilters(item) {
+      const documentSummary = distributionDocumentSummary(item);
+      if (documentFilter === 'has' && documentSummary.complete <= 0) return false;
+      if (documentFilter === 'complete' && documentSummary.complete < documentSummary.total) return false;
+      if (documentFilter === 'empty' && documentSummary.complete > 0) return false;
+      const sourceType = distributionSourceVisual(item).key;
+      if (sourceTypeFilter === 'distribution' && sourceType !== 'distribution') return false;
+      if (sourceTypeFilter === 'proposal' && sourceType !== 'proposal') return false;
+      return true;
+    }
+
+    function statsForScope(scope, sourceData = data) {
+      const rows = (sourceData.items || []).filter(itemMatchesMapClientFilters).filter(item => {
         if (scope.province && !compatibleRegionText(scope.province, item.province)) return false;
         if (scope.regency && !compatibleRegionText(scope.regency, item.regency)) return false;
         if (scope.district && !compatibleRegionText(scope.district, item.district)) return false;
@@ -3306,6 +3716,7 @@
       });
       return rows.reduce((acc, row) => {
         const metrics = householdMetrics(row);
+        const documentSummary = distributionDocumentSummary(row);
         acc.locations += 1;
         acc.households += metrics.effective;
         acc.effective_households_total += metrics.effective;
@@ -3315,6 +3726,8 @@
         else if (metrics.source === 'distribution') acc.households_from_distribution_locations += 1;
         else acc.households_empty_locations += 1;
         if (metrics.bnba > 0 && metrics.distribution > 0 && metrics.bnba !== metrics.distribution) acc.households_bnba_diff_locations += 1;
+        if (documentSummary.complete > 0) acc.document_locations_nonzero += 1;
+        if (documentSummary.complete === documentSummary.total) acc.document_locations_complete += 1;
         return acc;
       }, {
         locations: 0,
@@ -3326,6 +3739,8 @@
         households_from_distribution_locations: 0,
         households_empty_locations: 0,
         households_bnba_diff_locations: 0,
+        document_locations_nonzero: 0,
+        document_locations_complete: 0,
       });
     }
 
@@ -3373,6 +3788,7 @@
     }
 
     function resetMapDrill() {
+      drillRequestSeqRef.current += 1;
       setSelectedRegion({});
       setSelectedProvince('');
       setMapLevel('province');
@@ -3390,6 +3806,7 @@
     function stepMapBack() {
       if (mapLevel === 'province') return resetMapDrill();
       const nextScope = {};
+      drillRequestSeqRef.current += 1;
       mapBusyRef.current = true;
       pendingSelectionKeyRef.current = `back|${mapLevel}|${Date.now()}`;
       popupRef.current?.remove?.();
@@ -3451,8 +3868,8 @@
           <span><b>${fullNumber(statsHouseholds.bnba)}</b><small>KK by padan</small></span>
         </div>
         <div class="kat-popup-actions">
-          <button type="button" class="kat-popup-primary" data-map-padan>Padankan wilayah</button>
-          ${nextLevel ? `<button type="button" class="kat-popup-secondary" data-map-drill>Pilih ${nextLabel}</button>` : ''}
+          <button type="button" class="kat-popup-primary" data-map-padan><span class="ui-button-label">Padankan wilayah</span></button>
+          ${nextLevel ? `<button type="button" class="kat-popup-secondary" data-map-drill><span class="ui-button-label">Pilih ${nextLabel}</span></button>` : ''}
         </div>
       `;
       content.querySelector('.kat-popup-title').textContent = activeName;
@@ -3509,12 +3926,21 @@
 
     async function loadData(overrides = {}) {
       const seq = ++dataRequestSeqRef.current;
+      let globalSourceKey = '';
+      let isGlobalMapRequest = false;
       setLoading(true);
       setMessage(null);
       try {
         const nextQuery = Object.prototype.hasOwnProperty.call(overrides, 'query') ? overrides.query : queryRef.current;
         const nextProvince = Object.prototype.hasOwnProperty.call(overrides, 'province') ? overrides.province : selectedProvince;
         const nextSource = Object.prototype.hasOwnProperty.call(overrides, 'source') ? overrides.source : selectedSource;
+        globalSourceKey = normalizeName(nextSource || '');
+        isGlobalMapRequest = !String(nextQuery || '').trim() && !String(nextProvince || '').trim();
+        if (isGlobalMapRequest) {
+          globalMapRequestRef.current = { key: globalSourceKey, seq, pending: true };
+        } else if (globalMapRequestRef.current.pending) {
+          globalMapRequestRef.current.pending = false;
+        }
         const params = new URLSearchParams();
         params.set('limit', '500');
         if (String(nextQuery || '').trim()) params.set('q', String(nextQuery).trim());
@@ -3522,10 +3948,19 @@
         if (String(nextSource || '').trim()) params.set('source', String(nextSource).trim());
         const result = normalizeMapDataPayload(await apiRequest(`map_data.php?${params.toString()}`));
         if (seq !== dataRequestSeqRef.current) return;
+        if (isGlobalMapRequest) {
+          globalMapDataRef.current[globalSourceKey] = result;
+          if (globalMapRequestRef.current.seq === seq) {
+            globalMapRequestRef.current.pending = false;
+          }
+        }
         setData(result);
         setSelectedItem(null);
       } catch (error) {
         if (seq === dataRequestSeqRef.current) {
+          if (isGlobalMapRequest && globalMapRequestRef.current.seq === seq) {
+            globalMapRequestRef.current.pending = false;
+          }
           setMessage({ type: 'error', text: error.message });
         }
       } finally {
@@ -3638,9 +4073,35 @@
 
     useEffect(() => {
       const map = mapRef.current;
+      const mapBox = mapBoxRef.current;
+      if (!map || !mapBox || !window.L) return;
+      const invalidate = () => map.invalidateSize({ pan: false, animate: false });
+      const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(invalidate) : null;
+      resizeObserver?.observe(mapBox);
+      window.addEventListener('resize', invalidate, { passive: true });
+      requestAnimationFrame(invalidate);
+      const timer = window.setTimeout(invalidate, 160);
+      return () => {
+        resizeObserver?.disconnect();
+        window.removeEventListener('resize', invalidate);
+        window.clearTimeout(timer);
+      };
+    }, []);
+
+    useEffect(() => {
+      const map = mapRef.current;
       if (!map || !window.L) return;
       const seq = ++mapRequestSeqRef.current;
       let cancelled = false;
+      const renderMapLevel = mapLevel;
+      const renderSelectedRegion = { ...selectedRegion };
+      const renderViewKey = mapViewKey(renderMapLevel, renderSelectedRegion);
+      const globalSourceKey = normalizeName(selectedSource || '');
+      const clientMapFilterActive = documentFilter !== 'all' || sourceTypeFilter !== 'all';
+      const wantsGlobalProvinceLayer = renderMapLevel === 'province'
+        && !String(queryRef.current || '').trim()
+        && !String(selectedProvince || '').trim();
+      const globalMapData = wantsGlobalProvinceLayer ? (globalMapDataRef.current[globalSourceKey] || null) : null;
       mapBusyRef.current = true;
       setMapLoading(true);
       setMapFeatureCount(0);
@@ -3648,50 +4109,65 @@
         layerRef.current.remove();
         layerRef.current = null;
       }
-      const statMap = new Map((data.province_stats || []).map(item => [normalizeName(item.province), item]));
-      const geojsonScope = geojsonScopeForLevel(mapLevel, selectedRegion);
-      const geojsonParams = new URLSearchParams({ level: mapLevel });
+      const waitingForGlobalMapData = wantsGlobalProvinceLayer
+        && !globalMapData
+        && globalMapRequestRef.current.key === globalSourceKey
+        && globalMapRequestRef.current.pending;
+      if (waitingForGlobalMapData) {
+        return () => { cancelled = true; };
+      }
+      const layerData = renderMapLevel === 'province' && globalMapData ? globalMapData : data;
+      const statMap = new Map((layerData.province_stats || []).map(item => [normalizeName(item.province), item]));
+      const geojsonScope = geojsonScopeForLevel(renderMapLevel, renderSelectedRegion);
+      const geojsonParams = new URLSearchParams({ level: renderMapLevel });
       if (geojsonScope) geojsonParams.set('scope', geojsonScope);
       fetch(freshApiUrl(`geojson.php?${geojsonParams.toString()}`), { cache: 'no-store' })
         .then(response => response.json())
         .then(geojson => {
-          if (cancelled || seq !== mapRequestSeqRef.current) return;
+          if (cancelled || seq !== mapRequestSeqRef.current || renderViewKey !== mapViewKey(mapLevel, selectedRegion)) return;
           if (layerRef.current) layerRef.current.remove();
           const filtered = {
             ...geojson,
-            features: (geojson.features || []).filter(feature => featureMatchesScope(feature, mapLevel, selectedRegion)),
+            features: (geojson.features || []).filter(feature => featureMatchesScope(feature, renderMapLevel, renderSelectedRegion)),
           };
           const layer = window.L.geoJSON(filtered, {
             style(feature) {
-              const name = featureNameByLevel(feature, mapLevel);
-              const provinceStat = mapLevel === 'province' ? (statMap.get(normalizeName(name)) || {}) : {};
-              const scopedStats = mapLevel === 'province'
-                ? { locations: Number(provinceStat.distribution_count || 0), households: effectiveHouseholds(provinceStat) }
-                : statsForScope(scopeForLevel(mapLevel, name));
-              const active = normalizeName(selectedRegion[mapLevel] || '') === normalizeName(name);
+              const name = featureNameByLevel(feature, renderMapLevel);
+              const provinceStat = renderMapLevel === 'province' ? (statMap.get(normalizeName(name)) || {}) : {};
+              const aggregateStats = statsForScope(scopeForLevel(renderMapLevel, name, renderSelectedRegion), layerData);
+              const scopedStats = renderMapLevel === 'province'
+                ? {
+                    ...aggregateStats,
+                    locations: clientMapFilterActive ? aggregateStats.locations : Number(provinceStat.distribution_count || aggregateStats.locations || 0),
+                    households: clientMapFilterActive ? aggregateStats.households : effectiveHouseholds(provinceStat) || aggregateStats.households,
+                  }
+                : aggregateStats;
+              const active = normalizeName(renderSelectedRegion[renderMapLevel] || '') === normalizeName(name);
               const scopedActive = !active && (
-                (mapLevel === 'regency' && Boolean(selectedRegion.province))
-                || (mapLevel === 'district' && Boolean(selectedRegion.regency))
-                || (mapLevel === 'village' && Boolean(selectedRegion.district))
+                (renderMapLevel === 'regency' && Boolean(renderSelectedRegion.province))
+                || (renderMapLevel === 'district' && Boolean(renderSelectedRegion.regency))
+                || (renderMapLevel === 'village' && Boolean(renderSelectedRegion.district))
               );
+              const documentState = documentAggregateState(scopedStats);
+              const aggregateFill = documentState === 'complete' ? '#86efac' : documentState === 'partial' ? '#fbbf24' : (scopedStats.households > 2000 ? '#0f766e' : scopedStats.locations > 25 ? '#14b8a6' : scopedStats.locations > 5 ? '#7dd3fc' : '#dbeafe');
               return {
-                className: cx('province-shape', 'map-region-shape', `map-region-${mapLevel}`, active && 'map-region-active', scopedActive && 'map-region-scoped'),
+                className: cx('province-shape', 'map-region-shape', `map-region-${renderMapLevel}`, active && 'map-region-active', scopedActive && 'map-region-scoped', `map-region-docs-${documentState}`),
                 color: active ? '#0b3b33' : '#0f766e',
-                weight: active ? 3.6 : mapLevel === 'province' ? 1.15 : 1.55,
-                fillColor: active ? '#f2c76e' : scopedStats.households > 2000 ? '#0f766e' : scopedStats.locations > 25 ? '#14b8a6' : scopedStats.locations > 5 ? '#7dd3fc' : '#dbeafe',
-                fillOpacity: active ? 0.74 : scopedStats.locations ? 0.48 : 0.18,
+                weight: active ? 3.6 : renderMapLevel === 'province' ? 1.15 : 1.55,
+                fillColor: active ? '#f2c76e' : aggregateFill,
+                fillOpacity: active ? 0.74 : documentState === 'empty' ? (scopedStats.locations ? 0.3 : 0.18) : documentState === 'partial' ? 0.5 : 0.58,
               };
             },
             onEachFeature(feature, layerItem) {
-              const name = featureNameByLevel(feature, mapLevel);
-              const meta = featureScopeMeta(feature, mapLevel);
-              const scope = scopeForLevel(mapLevel, name, selectedRegion, meta);
-              const stat = mapLevel === 'province'
-                ? (statMap.get(normalizeName(name)) || {})
-                : statsForScope(scope);
-              const locations = mapLevel === 'province' ? Number(stat.distribution_count || 0) : Number(stat.locations || 0);
+              const name = featureNameByLevel(feature, renderMapLevel);
+              const meta = featureScopeMeta(feature, renderMapLevel);
+              const scope = scopeForLevel(renderMapLevel, name, renderSelectedRegion, meta);
+              const stat = renderMapLevel === 'province'
+                ? { ...(statMap.get(normalizeName(name)) || {}), ...statsForScope(scope, layerData) }
+                : statsForScope(scope, layerData);
+              const locations = renderMapLevel === 'province' && !clientMapFilterActive ? Number(stat.distribution_count || 0) : Number(stat.locations || 0);
               const households = householdMetrics(stat);
-              layerItem.bindTooltip(`${mapLevelLabel(mapLevel)}: ${name}`, { sticky: true, className: 'kat-map-tooltip' });
+              layerItem.bindTooltip(`${mapLevelLabel(renderMapLevel)}: ${name}`, { sticky: true, className: 'kat-map-tooltip' });
               layerItem.on({
                 mouseover(event) {
                   event.target.setStyle({
@@ -3712,7 +4188,7 @@
                     weight: 3.8,
                   });
                   event.target.bringToFront?.();
-                  chooseMapRegion(mapLevel, name, event.latlng, meta);
+                  chooseMapRegion(renderMapLevel, name, event.latlng, meta);
                 },
               });
               layerItem.options.title = `${name} - ${fullNumber(locations)} lokasi, ${fullNumber(households.effective)} KK final; ${householdSummaryText(stat)}`;
@@ -3722,22 +4198,22 @@
           const featureCount = filtered.features?.length || 0;
           setMapFeatureCount(featureCount);
           drillRequestSeqRef.current += 1;
-          setDrillOptions(featureCount ? geoOptionsFromFeatures(filtered.features, mapLevel) : []);
+          setDrillOptions(featureCount ? geoOptionsFromFeatures(filtered.features, renderMapLevel) : []);
           setDrillLoading(false);
           if (!featureCount) {
-            setMapNotice(`Layer ${mapLevelLabel(mapLevel)} belum tersedia untuk scope ini. Pilih dari daftar cepat di atas peta.`);
-            loadDrillChoices(mapLevel, selectedRegion);
+            setMapNotice(`Layer ${mapLevelLabel(renderMapLevel)} belum tersedia untuk scope ini. Pilih dari daftar cepat di atas peta.`);
+            loadDrillChoices(renderMapLevel, renderSelectedRegion);
             mapBusyRef.current = false;
             setMapLoading(false);
             return;
           }
-          setMapNotice(mapInstructionForLevel(mapLevel, selectedRegion));
+          setMapNotice(mapInstructionForLevel(renderMapLevel, renderSelectedRegion));
           const fitLayer = () => {
             try {
               map.invalidateSize();
               const bounds = layer.getBounds();
               if (bounds.isValid()) {
-                const maxZoom = mapLevel === 'province' ? 6 : mapLevel === 'regency' ? 8 : 10;
+                const maxZoom = renderMapLevel === 'province' ? 6 : renderMapLevel === 'regency' ? 8 : 10;
                 map.fitBounds(bounds.pad(0.08), { padding: [24, 24], maxZoom, animate: false });
               }
             } catch (_) { }
@@ -3748,14 +4224,18 @@
           setMapLoading(false);
         })
         .catch(() => {
-          if (cancelled || seq !== mapRequestSeqRef.current) return;
+          if (cancelled || seq !== mapRequestSeqRef.current || renderViewKey !== mapViewKey(mapLevel, selectedRegion)) return;
           mapBusyRef.current = false;
           setMapLoading(false);
-          setMessage({ type: 'error', text: `GeoJSON ${mapLevelLabel(mapLevel)} belum bisa dimuat.` });
+          setMessage({ type: 'error', text: `GeoJSON ${mapLevelLabel(renderMapLevel)} belum bisa dimuat.` });
         });
       return () => { cancelled = true; };
     }, [
       mapLevel,
+      selectedSource,
+      selectedProvince,
+      documentFilter,
+      sourceTypeFilter,
       selectedRegion.province,
       selectedRegion.province_code,
       selectedRegion.regency,
@@ -3764,6 +4244,8 @@
       selectedRegion.district_code,
       selectedRegion.village,
       selectedRegion.village_code,
+      data.items,
+      data.province_stats,
     ]);
 
     const summary = data.summary || {};
@@ -3773,7 +4255,68 @@
       return (data.province_stats || []).find(item => normalizeName(item.province) === normalizeName(selectedProvince)) || null;
     }, [data.province_stats, selectedProvince]);
     const activeSources = data.source_breakdown || [];
-    const items = data.items || [];
+
+    useEffect(() => {
+      if (!selectedItem) return;
+      const selectedIdentity = locationItemIdentity(selectedItem);
+      if (!items.some(item => locationItemIdentity(item) === selectedIdentity)) {
+        setSelectedItem(null);
+      }
+    }, [items, selectedItem]);
+
+    useEffect(() => {
+      const map = mapRef.current;
+      if (!map || !window.L) return;
+      locationMarkerLayerRef.current?.remove?.();
+      locationMarkerLayerRef.current = null;
+      const markerLayer = window.L.layerGroup();
+      const selectedKey = selectedItem ? locationItemIdentity(selectedItem) : '';
+      items.forEach((item, idx) => {
+        const coordinates = locationCoordinates(item);
+        if (!coordinates) return;
+        const visual = locationVisualMeta(item);
+        const key = locationItemIdentity(item);
+        const label = `${item.title || item.location || 'Lokasi KAT'}: ${visual.label}`;
+        const marker = window.L.circleMarker(coordinates, {
+          className: cx('kat-location-marker', visual.className),
+          radius: key === selectedKey ? 9 : 7,
+          color: visual.source.color,
+          weight: key === selectedKey ? 3 : 2,
+          dashArray: visual.source.dashArray || undefined,
+          fillColor: visual.documents.color,
+          fillOpacity: 0.88,
+          opacity: 0.98,
+        });
+        marker.bindTooltip(label, { sticky: true, direction: 'top', className: 'kat-location-tooltip' });
+        marker.on({
+          mouseover(event) {
+            event.target.setStyle({ radius: key === selectedKey ? 10 : 9 });
+            event.target.bringToFront?.();
+          },
+          mouseout(event) {
+            event.target.setStyle({ radius: key === selectedKey ? 9 : 7 });
+          },
+          click() {
+            setSelectedItem({ ...item, __idx: idx });
+          },
+        });
+        marker.addTo(markerLayer);
+      });
+      markerLayer.addTo(map);
+      markerLayer.eachLayer(marker => {
+        const path = marker._path;
+        if (!path) return;
+        path.setAttribute('role', 'button');
+        path.setAttribute('tabindex', '0');
+        path.setAttribute('aria-label', marker.getTooltip?.()?.getContent?.() || 'Lokasi KAT');
+      });
+      locationMarkerLayerRef.current = markerLayer;
+      return () => {
+        markerLayer.remove();
+        if (locationMarkerLayerRef.current === markerLayer) locationMarkerLayerRef.current = null;
+      };
+    }, [items, selectedItem]);
+
     const dataStoreMode = data.data_source || appConfig?.capabilities?.data_store_mode || '';
     const dataStoreLabel = data.data_source_label || appConfig?.capabilities?.data_store_label || '';
     const dataStoreWarning = data.warning || '';
@@ -3781,12 +4324,16 @@
     const summaryHouseholds = householdMetrics(summary);
     const summaryDiffLocations = Number(summary.households_bnba_diff_locations || 0);
     const householdCardSubtitle = `${householdSummaryText(summary)}${summaryDiffLocations ? ` ${fullNumber(summaryDiffLocations)} lokasi beda angka.` : ''}`;
+    const paskSummary = summary.pask_summary || {};
     const statCards = [
       { key: 'province', label: 'Persebaran Provinsi', value: summary.province_total, tone: 'blue', icon: 'Map', breakdownKey: 'province', subtitle: 'Provinsi unik setelah normalisasi' },
       { key: 'regency', label: 'Persebaran Kabupaten', value: summary.regency_total, tone: 'cyan', icon: 'Landmark', breakdownKey: 'regency', subtitle: 'Kabupaten/Kota per provinsi' },
       { key: 'district', label: 'Persebaran Kecamatan', value: summary.district_total, tone: 'emerald', icon: 'Network', breakdownKey: 'district', subtitle: 'Kecamatan dikelompokkan per provinsi' },
       { key: 'village', label: 'Persebaran Kelurahan', value: summary.village_total, tone: 'indigo', icon: 'MapPinned', breakdownKey: 'village', subtitle: 'Kelurahan/Desa per kecamatan' },
       { key: 'location', label: 'Jumlah Lokasi', value: summary.location_total || summary.distribution_total, tone: 'violet', icon: 'LocateFixed', breakdownKey: 'location', subtitle: 'Semua lokasi persebaran' },
+      { key: 'pask_2026', label: 'PASK 2026', value: paskSummary['2026']?.locations || 0, tone: 'emerald', icon: 'BadgeCheck', breakdownKey: 'location', subtitle: `${fullNumber(paskSummary['2026']?.effective_households || 0)} KK final`, filter: row => row.pask_period === '2026' },
+      { key: 'pask_before_2026', label: 'PASK sebelum 2026', value: paskSummary.before_2026?.locations || 0, tone: 'amber', icon: 'History', breakdownKey: 'location', subtitle: `${fullNumber(paskSummary.before_2026?.effective_households || 0)} KK final`, filter: row => row.pask_period === 'before_2026' },
+      { key: 'pask_unmarked', label: 'PASK belum ditandai', value: paskSummary.unmarked?.locations || 0, tone: 'slate', icon: 'CircleHelp', breakdownKey: 'location', subtitle: `${fullNumber(paskSummary.unmarked?.effective_households || 0)} KK final`, filter: row => !row.pask_period },
       { key: 'households', label: 'KK final', value: summaryHouseholds.effective, tone: 'slate', icon: 'Users', breakdownKey: 'location', subtitle: householdCardSubtitle },
       { key: 'locations_with_households', label: 'Lokasi KK Terisi', value: summary.locations_with_households, tone: 'emerald', icon: 'CheckCircle2', breakdownKey: 'location', subtitle: 'Lokasi dengan KK final lebih dari 0', filter: row => effectiveHouseholds(row) > 0 },
       { key: 'locations_zero_households', label: 'Lokasi KK 0', value: summary.locations_zero_households, tone: 'amber', icon: 'CircleSlash', breakdownKey: 'location', subtitle: 'Lokasi yang masih 0 KK final', filter: row => effectiveHouseholds(row) <= 0 },
@@ -3798,7 +4345,9 @@
       ? ((breakdowns[activeStatDetail.breakdownKey] || []).filter(activeStatDetail.filter || (() => true)))
       : [];
     const activeScopeTitle = selectedRegion.village || selectedRegion.district || selectedRegion.regency || selectedRegion.province || selectedProvince;
-    const activeScopeStats = selectedRegion.province ? statsForScope(selectedRegion) : null;
+    const activeScopeStats = selectedRegion.province
+      ? statsForScope(selectedRegion)
+      : ((documentFilter !== 'all' || sourceTypeFilter !== 'all') && selectedProvince ? statsForScope({ province: selectedProvince }) : null);
     const selectedProvinceHouseholds = householdMetrics(selectedStat || {});
     const activeLocations = activeScopeStats ? activeScopeStats.locations : Number(selectedStat?.distribution_count || 0);
     const activeHouseholds = activeScopeStats ? activeScopeStats.effective_households_total : selectedProvinceHouseholds.effective;
@@ -3821,9 +4370,24 @@
       ),
       h(LinkArchiveHome, { onOpenArchive }),
       activeStatDetail ? h(StatDetailModal, { stat: activeStatDetail, rows: statDetailRows, onClose: () => setStatDetailKey('') }) : null,
-      h('section', { className: 'map-layout grid min-h-[640px] gap-4' },
-        h('div', { className: 'map-shell min-h-[520px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm' },
-          h('div', { ref: mapBoxRef, className: 'h-[520px] w-full lg:h-full' }),
+      h('section', { className: 'map-layout map-workspace grid gap-4' },
+        h('div', { className: 'map-shell map-canvas rounded-2xl border border-slate-200 bg-white shadow-sm' },
+          h('div', { ref: mapBoxRef, className: 'map-canvas-inner' }),
+          h('div', { className: 'map-visual-legend', role: 'group', 'aria-label': 'Legenda visual peta' },
+            h('strong', null, 'Legenda peta'),
+            h('div', { className: 'map-legend-section' },
+              h('span', { className: 'map-legend-label' }, 'Dokumen'),
+              h('span', { className: 'map-legend-item', title: '0 dari 9 dokumen lengkap' }, h('i', { className: 'map-legend-swatch is-document-empty', 'aria-hidden': 'true' }), '0/9'),
+              h('span', { className: 'map-legend-item', title: '1 sampai 8 dari 9 dokumen lengkap' }, h('i', { className: 'map-legend-swatch is-document-partial', 'aria-hidden': 'true' }), '1-8/9'),
+              h('span', { className: 'map-legend-item', title: '9 dari 9 dokumen lengkap' }, h('i', { className: 'map-legend-swatch is-document-complete', 'aria-hidden': 'true' }), '9/9')
+            ),
+            h('div', { className: 'map-legend-section' },
+              h('span', { className: 'map-legend-label' }, 'Sumber'),
+              h('span', { className: 'map-legend-item', title: 'Data persebaran' }, h('i', { className: 'map-legend-swatch is-source-distribution', 'aria-hidden': 'true' }), 'persebaran'),
+              h('span', { className: 'map-legend-item', title: 'Data pengusulan' }, h('i', { className: 'map-legend-swatch is-source-proposal', 'aria-hidden': 'true' }), 'pengusulan'),
+              h('span', { className: 'map-legend-item', title: 'Sumber tidak diketahui' }, h('i', { className: 'map-legend-swatch is-source-unknown', 'aria-hidden': 'true' }), 'unknown')
+            )
+          ),
           h('div', { className: cx('map-drill-panel', mapPanelCollapsed && 'is-collapsed', mapLoading && 'is-loading') },
             h('div', { className: 'map-drill-head' },
               h('span', { className: 'map-drill-icon' }, h(Icon, { name: mapLevelMeta.icon, size: 16 })),
@@ -3843,13 +4407,13 @@
             !mapPanelCollapsed && (drillLoading || drillOptions.length || (mapLevel !== 'province' && selectedTrail.length)) ? h('div', { className: 'map-drill-options' },
               drillLoading ? h('span', { className: 'map-drill-loading' }, 'Memuat pilihan...') :
                 drillOptions.length ? drillOptions.slice(0, 12).map(option => h('button', { key: `${mapLevel}-${option.name}-${option.subtitle || ''}`, type: 'button', onClick: () => chooseDrillOption(option), title: option.subtitle || option.name },
-                  h('span', null, option.name),
+                  h('span', { className: 'ui-button-label' }, option.name),
                   option.count ? h('small', null, compactNumber(option.count)) : null
                 )) : h('span', { className: 'map-drill-empty' }, `Belum ada daftar ${mapLevelMeta.label} untuk scope ini. Admin bisa upload GeoJSON atau data persebaran tambahan.`)
             ) : null
           )
         ),
-        h('aside', { className: 'map-side-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur-xl' },
+        h('aside', { className: 'map-side-panel map-results-panel rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur-xl' },
           h('div', { className: 'grid gap-3' },
             h('div', { className: 'flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100' },
               h('span', { className: 'text-xs font-black uppercase text-slate-500' }, 'Sumber database aktif'),
@@ -3858,7 +4422,28 @@
             h(Field, { label: 'Cari wilayah dan komunitas' },
               h(TextInput, { value: query, onChange: event => setQuery(event.target.value), onKeyDown: event => { if (event.key === 'Enter') loadData(); }, placeholder: 'Contoh: NTB, Bima, Tambora, Labuan Kananga' })
             ),
-            h('div', { className: 'grid grid-cols-[1fr_auto] gap-2' },
+            h('div', { className: 'map-client-filters' },
+              h(Field, { label: 'Status dokumen' },
+                h(SelectInput, { value: documentFilter, onChange: event => setDocumentFilter(event.target.value), 'aria-label': 'Filter status dokumen lokasi' },
+                  [
+                    ['all', 'Semua dokumen'],
+                    ['has', 'Ada dokumen (>0)'],
+                    ['complete', 'Lengkap (9/9)'],
+                    ['empty', 'Belum ada (0/9)'],
+                  ].map(([value, label]) => h('option', { key: value, value }, label))
+                )
+              ),
+              h(Field, { label: 'Jenis sumber' },
+                h(SelectInput, { value: sourceTypeFilter, onChange: event => setSourceTypeFilter(event.target.value), 'aria-label': 'Filter jenis sumber lokasi' },
+                  [
+                    ['all', 'Semua jenis'],
+                    ['distribution', 'Persebaran saja'],
+                    ['proposal', 'Pengusulan saja'],
+                  ].map(([value, label]) => h('option', { key: value, value }, label))
+                )
+              )
+            ),
+            h('div', { className: 'map-province-filter grid grid-cols-[1fr_auto] gap-2' },
               h(TextInput, { value: selectedProvince, onChange: event => setSelectedProvince(event.target.value), placeholder: 'Filter provinsi' }),
               h(Button, { type: 'button', variant: 'blue', onClick: () => loadData(), disabled: loading, className: 'gap-2 px-3' }, h(Icon, { name: loading ? 'LoaderCircle' : 'Search', size: 17 }), loading ? '...' : 'Cari')
             ),
@@ -3870,7 +4455,7 @@
               type: 'button',
               variant: 'success',
               onClick: () => setProposalModalOpen(true),
-              className: 'w-full gap-2 text-xs font-black shadow-xs my-1 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white py-2.5 rounded-xl border border-purple-800'
+              className: 'map-proposal-action w-full gap-2 text-xs font-black my-1 py-2.5'
             },
               h(Icon, { name: 'FilePlus', size: 16 }),
               'Usulkan Data KAT Baru (Publik)'
@@ -3920,57 +4505,65 @@
             ),
             h(SourcePills, { sources: activeSources, selectedSource, onSelect: source => { setSelectedSource(source); loadData({ source }); } })
           ) : null,
-          selectedItem ? h('div', { className: 'mt-4' }, h(LocationDetailPanel, {
-            item: selectedItem,
-            onClose: () => setSelectedItem(null),
-            onStartPadan,
-            onDocumentsSaved: updatedItem => {
-              setSelectedItem(current => current ? { ...updatedItem, __idx: current.__idx } : current);
-              setData(current => ({
-                ...current,
-                items: (current.items || []).map(row => Number(row.distribution_id || 0) === Number(updatedItem.distribution_id || 0) ? { ...row, ...updatedItem } : row),
-              }));
-            },
-          })) : null,
-          h('div', { className: 'location-list mt-4 grid max-h-[470px] gap-3 overflow-auto pr-1' },
+          h('div', { className: 'map-location-list-meta', 'aria-live': 'polite' },
+            h('span', null, 'Daftar lokasi'),
+            h('strong', null, `${fullNumber(items.length)} tampil`)
+          ),
+          h('div', { className: 'location-list mt-2 grid max-h-[470px] gap-3 overflow-auto pr-1' },
             items.length ? items.map((item, idx) => {
-              const key = locationItemKey(item, idx);
-              const selected = (selectedItem && locationItemKey(selectedItem, selectedItem.__idx ?? idx) === key) || locationScopeSelected(item);
+              const key = locationItemIdentity(item);
+              const selected = (selectedItem && locationItemIdentity(selectedItem) === key) || locationScopeSelected(item);
               const households = householdMetrics(item);
-              return h('article', { key, className: cx('location-card rounded-2xl border p-3 transition-colors duration-150', selected ? 'is-map-linked border-blue-200 bg-blue-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200 hover:bg-white') },
-                h('button', { type: 'button', className: 'location-card-main text-left', onClick: () => selectLocationOnMap(item, idx) },
-                  h('div', { className: 'flex items-start justify-between gap-3' },
-                    h('div', { className: 'min-w-0' },
-                      h('p', { className: 'break-words text-sm font-black text-slate-950', title: item.title }, item.title || '-'),
-                      h('p', { className: 'mt-1 text-xs leading-5 text-slate-500' }, itemLocationLine(item))
+              const locationVisual = locationVisualMeta(item);
+              const cardLabel = `Buka detail ${item.title || item.location || 'lokasi KAT'}; ${locationVisual.label}`;
+              return h('article', { key, className: cx('location-card rounded-2xl border p-3 transition-colors duration-150', locationVisual.className, selected ? 'is-map-linked border-blue-200 bg-blue-50' : 'border-slate-100 bg-slate-50 hover:border-slate-200 hover:bg-white'), 'data-document-state': locationVisual.documents.key, 'data-source-type': locationVisual.source.key },
+                h('button', { type: 'button', className: 'location-card-main text-left', onClick: () => selectLocationOnMap(item, idx), 'aria-label': cardLabel, title: cardLabel },
+                  h('div', { className: 'location-card-heading' },
+                    h('div', { className: 'location-card-copy' },
+                      h('p', { className: 'location-card-title', title: item.title }, item.title || '-'),
+                      h('p', { className: 'location-card-location' }, itemLocationLine(item))
                     ),
-                    h('span', { className: 'flex shrink-0 items-center gap-2' },
-                      h(Badge, { status: item.status }, item.status),
-                      item.bnba_summary?.has_bnba ? h(Badge, { status: 'checked' }, 'BNBA') : null,
-                      Number(item.documents_total || 0) ? h(Badge, { status: Number(item.documents_complete || 0) === Number(item.documents_total || 0) ? 'checked' : 'pending' }, `${fullNumber(item.documents_complete || 0)}/${fullNumber(item.documents_total || 0)} dok.`) : null,
-                      h(Icon, { name: 'ChevronRight', size: 16, className: 'text-slate-400' })
-                    )
+                    h('span', { className: 'location-card-chevron', 'aria-hidden': 'true' }, h(Icon, { name: 'ChevronRight', size: 16 }))
                   ),
-                  item.address ? h('p', { className: 'mt-2 break-words text-xs leading-5 text-slate-600' }, item.address) : null,
-                  h('div', { className: 'mt-2 flex flex-wrap items-center gap-2 text-xs font-black text-slate-600' },
-                    households.distribution ? h('span', { className: 'inline-flex items-center gap-1 rounded-full px-2 py-1', title: householdSummaryText(item) }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} KK by Excel`) : null,
-                    households.bnba ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-200', title: householdSummaryText(item) }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(households.bnba)} KK by padan`) : null,
-                    !households.distribution && !households.bnba && households.effective ? h('span', { className: 'inline-flex items-center gap-1 rounded-full px-2 py-1', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK final`) : null,
-                    households.delta ? h('span', { className: 'inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-200' }, h(Icon, { name: 'Activity', size: 13 }), `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)}`) : null,
-                    item.source_data ? h('span', { className: 'max-w-full break-words rounded-full px-2 py-1', title: item.source_data }, item.source_data) : null,
-                    item.data_year ? h('span', { className: 'rounded-full px-2 py-1' }, item.data_year) : null
+                  h('div', { className: 'location-card-badges' },
+                    h(PaskBadge, { value: item.pask_period, compact: true }),
+                    h(LocationVisualBadge, { type: 'documents', visual: locationVisual, children: `${locationVisual.documents.shortLabel} dok.` }),
+                    h(LocationVisualBadge, { type: 'source', visual: locationVisual, children: locationVisual.source.label }),
+                    h(Badge, { status: item.status }, item.status),
+                    item.bnba_summary?.has_bnba ? h(Badge, { status: 'checked' }, 'BNBA') : null,
+                  ),
+                  item.address ? h('p', { className: 'location-card-address' }, item.address) : null,
+                  h('div', { className: 'location-card-metrics' },
+                    households.distribution ? h('span', { className: 'location-card-metric', title: householdSummaryText(item) }, h(Icon, { name: 'Table', size: 13 }), `${fullNumber(households.distribution)} KK by Excel`) : null,
+                    households.bnba ? h('span', { className: 'location-card-metric is-success', title: householdSummaryText(item) }, h(Icon, { name: 'FileSpreadsheet', size: 13 }), `${fullNumber(households.bnba)} KK by padan`) : null,
+                    !households.distribution && !households.bnba && households.effective ? h('span', { className: 'location-card-metric', title: householdSummaryText(item) }, h(Icon, { name: 'Users', size: 13 }), `${fullNumber(households.effective)} KK final`) : null,
+                    households.delta ? h('span', { className: 'location-card-metric is-warning' }, h(Icon, { name: 'Activity', size: 13 }), `${households.delta > 0 ? '+' : ''}${fullNumber(households.delta)}`) : null,
+                    item.source_data ? h('span', { className: 'location-card-meta', title: item.source_data }, item.source_data) : null,
+                    item.data_year ? h('span', { className: 'location-card-meta' }, item.data_year) : null
                   )
                 ),
                 h('button', { type: 'button', className: 'location-card-padan', onClick: () => onStartPadan?.(item) },
                   h(Icon, { name: 'UploadCloud', size: 14 }),
-                  'Padankan lokasi ini'
+                  h('span', { className: 'ui-button-label' }, 'Padankan lokasi ini')
                 )
               );
             }) : h('div', { className: 'rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500' }, 'Belum ada data pada filter ini.')
           )
-        )
-      ),
+        ),
+        selectedItem ? h(LocationDetailPanel, {
+          item: selectedItem,
+          onClose: () => setSelectedItem(null),
+          onStartPadan,
+          onDocumentsSaved: updatedItem => {
+            setSelectedItem(current => current ? { ...updatedItem, __idx: current.__idx } : current);
+            setData(current => ({
+              ...current,
+              items: (current.items || []).map(row => Number(row.distribution_id || 0) === Number(updatedItem.distribution_id || 0) ? { ...row, ...updatedItem } : row),
+            }));
+          },
+        }) : null,
       selectedItem ? h(BnbaLocationTable, { item: selectedItem }) : null
+    ),
     );
   }
 
@@ -4840,7 +5433,7 @@
   function AdminPage() {
     const adminTabs = [
       ['jobs', 'Job', 'BriefcaseBusiness'],
-      ['distribution', 'Persebaran', 'MapPinned'],
+      ['distribution', 'Persebaran & PDF', 'MapPinned'],
       ['fix', 'Fix', 'BadgeCheck'],
       ['mail', 'Email', 'MailCheck'],
       ['store', 'Data Store', 'DatabaseZap'],
@@ -5077,6 +5670,7 @@
     const empty = {
       source_data: 'DATA PERSEBARAN KAT',
       data_year: new Date().getFullYear(),
+      pask_period: '',
       province: '',
       regency: '',
       district: '',
@@ -5110,6 +5704,7 @@
 
     const [form, setForm] = useState(empty);
     const [query, setQuery] = useState('');
+    const [paskFilter, setPaskFilter] = useState('');
     const [file, setFile] = useState(null);
     const [preview, setPreview] = useState(null);
     const [message, setMessage] = useState(null);
@@ -5209,6 +5804,17 @@
         return raw ? JSON.parse(raw) : null;
       } catch (_) { return null; }
     });
+
+    useEffect(() => {
+      if (window.location.hash !== '#pdf-import') return undefined;
+      const timer = window.setTimeout(() => {
+        document.getElementById('pdf-import')?.scrollIntoView({
+          behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+          block: 'start',
+        });
+      }, 120);
+      return () => window.clearTimeout(timer);
+    }, []);
 
     async function extractPdfWithGemini(forceReExtract = false) {
       if (!pdfFile) return setMessage({ type: 'error', text: 'Pilih file PDF terlebih dahulu.' });
@@ -5392,6 +5998,7 @@
         {
           source_data: defaultSource,
           data_year: new Date().getFullYear(),
+          pask_period: '',
           province: '',
           regency: '',
           district: '',
@@ -5463,12 +6070,16 @@
       return summary;
     }, [rows]);
 
-    async function loadRows() {
+    async function loadRows(overrides = {}) {
       if (!adminKey) return;
       setLoading(true);
       try {
         const params = new URLSearchParams({ limit: 100 });
-        if (query) params.set('q', query);
+        const nextQuery = Object.prototype.hasOwnProperty.call(overrides, 'q') ? overrides.q : query;
+        const nextPask = Object.prototype.hasOwnProperty.call(overrides, 'pask_period') ? overrides.pask_period : paskFilter;
+        if (nextQuery) params.set('q', nextQuery);
+        if (nextPask === '__unmarked__') params.set('pask_period', '');
+        else if (nextPask !== '') params.set('pask_period', nextPask);
         const data = await apiRequest(`distribution.php?${params.toString()}`);
         setRows(data.rows || []);
       } catch (error) {
@@ -5524,7 +6135,15 @@
       if (!preview?.token) return;
       setLoading(true);
       try {
-        const data = await apiRequest('distribution.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ action: 'import_commit', token: preview.token }) });
+        const paskOverrides = {};
+        (preview.preview_rows || []).forEach(row => {
+          const rowHash = String(row?.row_hash || '').trim();
+          const value = row?.pask_period;
+          if (rowHash && (value === '' || value === '2026' || value === 'before_2026')) {
+            paskOverrides[rowHash] = value;
+          }
+        });
+        const data = await apiRequest('distribution.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ action: 'import_commit', token: preview.token, pask_overrides: paskOverrides }) });
         setPreview(null);
         setMessage({ type: 'info', text: `${compactNumber(data.inserted)} baris ditambahkan dan ${compactNumber(data.updated || 0)} checklist lokasi diperbarui.` });
         await loadRows();
@@ -5632,6 +6251,7 @@
           [
             ['source_data', 'Sumber data'],
             ['data_year', 'Tahun data'],
+            ['pask_period', 'Penanda PASK'],
             ['province', 'Provinsi (wajib)'],
             ['regency', 'Kabupaten/Kota'],
             ['district', 'Kecamatan/Distrik'],
@@ -5642,12 +6262,16 @@
             ['households_total', 'Jumlah KK total'],
           ].map(([name, label]) =>
             h(Field, { key: name, label },
-              h(TextInput, {
-                value: form[name] ?? '',
-                type: ['data_year', 'households_spread', 'households_total'].includes(name) ? 'number' : 'text',
-                min: ['households_spread', 'households_total'].includes(name) ? '0' : undefined,
-                onChange: event => setField(name, event.target.value),
-              })
+              name === 'pask_period'
+                ? h(SelectInput, { value: form[name] ?? '', onChange: event => setField(name, event.target.value) },
+                  PASK_PERIOD_OPTIONS.map(([value, optionLabel]) => h('option', { key: value, value }, optionLabel))
+                )
+                : h(TextInput, {
+                  value: form[name] ?? '',
+                  type: ['data_year', 'households_spread', 'households_total'].includes(name) ? 'number' : 'text',
+                  min: ['households_spread', 'households_total'].includes(name) ? '0' : undefined,
+                  onChange: event => setField(name, event.target.value),
+                })
             )
           ),
           h('label', { className: 'flex items-center gap-2 text-sm font-bold text-slate-700' }, h('input', { type: 'checkbox', checked: Boolean(form.is_proposed), onChange: event => setField('is_proposed', event.target.checked ? 1 : 0) }), 'Pengusulan'),
@@ -5670,7 +6294,7 @@
             ) : null
           )
         ),
-        h('div', { className: 'pdf-import-container' },
+        h('div', { id: 'pdf-import', className: 'pdf-import-container' },
           h('div', { className: 'pdf-import-header-row' },
             h('div', { className: 'pdf-import-badge-icon' }, h(Icon, { name: 'Sparkles', size: 20 })),
             h('div', { className: 'pdf-import-header-texts' },
@@ -5819,8 +6443,9 @@
             )
           )
         ),
-        h('div', { className: 'grid gap-2 md:grid-cols-[1fr_auto]' },
+        h('div', { className: 'grid gap-2 md:grid-cols-[1fr_minmax(11rem,auto)_auto]' },
           h(TextInput, { value: query, onChange: event => setQuery(event.target.value), placeholder: 'Cari persebaran' }),
+          h(SelectInput, { value: paskFilter, onChange: event => { setPaskFilter(event.target.value); loadRows({ pask_period: event.target.value }); }, className: 'text-xs font-bold' }, [['', 'Semua PASK'], ['2026', 'PASK 2026'], ['before_2026', 'PASK sebelum 2026'], ['__unmarked__', 'Belum ditandai']].map(([value, optionLabel]) => h('option', { key: value, value }, optionLabel))),
           h(Button, { type: 'button', variant: 'blue', disabled: loading || !adminKey, onClick: loadRows }, loading ? '...' : 'Muat')
         ),
         preview ? h('div', { className: 'mt-4 grid gap-3' },
@@ -5833,7 +6458,7 @@
               h(SourcePills, { sources: sourceBreakdownFromRows(preview.preview_rows || []) })
             )
           ),
-          h(PreviewTable, { rows: preview.preview_rows || [], maxHeight: 300 })
+          h(PreviewTable, { rows: preview.preview_rows || [], maxHeight: 300, onUpdatePask: (index, value) => setPreview(current => current ? { ...current, preview_rows: (current.preview_rows || []).map((row, rowIndex) => rowIndex === index ? { ...row, pask_period: value } : row) } : current) })
         ) : null,
         h('div', { className: 'distribution-record-list mt-4' },
           (Array.isArray(rows) && rows.length) ? rows.map(row => h('article', { key: row.id, className: 'distribution-record-card' },
@@ -5860,6 +6485,7 @@
               )
             ),
             h('div', { className: 'distribution-record-actions' },
+              h(PaskBadge, { value: row.pask_period, compact: true }),
               row.data_year ? h('span', { className: 'distribution-year-pill' }, row.data_year) : null,
               h('span', {
                 className: cx('distribution-year-pill', Number(row.documents_complete || 0) === Number(row.documents_total || DISTRIBUTION_DOCUMENT_FIELDS.length) && 'is-complete'),
@@ -6872,27 +7498,65 @@
     const [message, setMessage] = useState(null);
     const [loading, setLoading] = useState(false);
     const processOptions = linkProcessOptions(links, []);
+    const loadRequestRef = useRef(0);
+    const pendingDeletedIdsRef = useRef(new Set());
+    const pendingDeleteAttemptsRef = useRef(new Map());
+    const pendingDeleteTimersRef = useRef(new Map());
 
-    async function load() {
+    async function load({ preserveMessage = false, settlePendingDeletes = false } = {}) {
       if (!adminKey) return;
+      const requestId = ++loadRequestRef.current;
       setLoading(true);
-      setMessage(null);
+      if (!preserveMessage) setMessage(null);
       try {
         const params = new URLSearchParams({ key: adminKey, limit: 200 });
         if (query) params.set('q', query);
         if (status) params.set('status', status);
         const data = await apiRequest(`link_archive.php?${params.toString()}`);
-        setLinks(data.links || []);
+        if (requestId !== loadRequestRef.current) return;
+        const loadedLinks = Array.isArray(data.links) ? data.links : [];
+        if (settlePendingDeletes) {
+          const remoteIds = new Set(loadedLinks.map(item => String(item?.id ?? '')).filter(Boolean));
+          pendingDeletedIdsRef.current.forEach(id => {
+            if (!remoteIds.has(id)) {
+              pendingDeletedIdsRef.current.delete(id);
+              pendingDeleteAttemptsRef.current.delete(id);
+            }
+          });
+        }
+        const hiddenDeletedIds = pendingDeletedIdsRef.current;
+        setLinks(loadedLinks.filter(item => !hiddenDeletedIds.has(String(item?.id ?? ''))));
         setSummary(data.summary || {});
         if (data.warning) setMessage({ type: 'info', text: data.warning });
       } catch (error) {
-        setMessage({ type: 'error', text: error.message });
+        if (requestId === loadRequestRef.current) setMessage({ type: 'error', text: error.message });
       } finally {
-        setLoading(false);
+        if (requestId === loadRequestRef.current) setLoading(false);
       }
     }
 
-    useEffect(() => { if (adminKey) load(); }, [adminKey]);
+    function schedulePendingDeleteRefresh(id) {
+      if (pendingDeleteTimersRef.current.has(id)) return;
+      const attempt = pendingDeleteAttemptsRef.current.get(id) || 0;
+      if (attempt >= 3) return;
+      pendingDeleteAttemptsRef.current.set(id, attempt + 1);
+      const delays = [3000, 7000, 15000];
+      const timer = window.setTimeout(async () => {
+        pendingDeleteTimersRef.current.delete(id);
+        await load({ preserveMessage: true, settlePendingDeletes: true });
+        if (pendingDeletedIdsRef.current.has(id)) schedulePendingDeleteRefresh(id);
+      }, delays[attempt]);
+      pendingDeleteTimersRef.current.set(id, timer);
+    }
+
+    useEffect(() => {
+      if (adminKey) load();
+      return () => {
+        loadRequestRef.current += 1;
+        pendingDeleteTimersRef.current.forEach(timer => window.clearTimeout(timer));
+        pendingDeleteTimersRef.current.clear();
+      };
+    }, [adminKey]);
 
     function setField(name, value) {
       setForm(current => ({ ...current, [name]: value }));
@@ -6902,10 +7566,10 @@
       if (!adminKey) return;
       setLoading(true);
       try {
-        await apiRequest('link_archive.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ action: 'save', id: form.id || 0, record: form }) });
+        const result = await apiRequest('link_archive.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ action: 'save', id: form.id || 0, record: form }) });
         setForm(empty);
-        setMessage({ type: 'info', text: 'Link archive tersimpan.' });
-        await load();
+        await load({ preserveMessage: true });
+        setMessage({ type: result.warning ? 'info' : 'success', text: result.warning || 'Link archive tersimpan.' });
       } catch (error) {
         setMessage({ type: 'error', text: error.message });
       } finally {
@@ -6947,12 +7611,47 @@
 
     async function deleteLink(link) {
       if (!window.confirm(`Hapus link "${link.title || link.link_host || link.url}"?`)) return;
+      const id = String(link?.id ?? '');
+      if (!id) {
+        setMessage({ type: 'error', text: 'Link tidak memiliki ID yang valid sehingga tidak dapat dihapus.' });
+        return;
+      }
+      const previousLinks = links;
+      const previousIndex = previousLinks.findIndex(item => String(item?.id ?? '') === id);
+      loadRequestRef.current += 1;
       setLoading(true);
       try {
-        await apiRequest('link_archive.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ action: 'delete', id: link.id }) });
-        setMessage({ type: 'info', text: 'Link archive dihapus.' });
-        await load();
+        const result = await apiRequest('link_archive.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ action: 'delete', id: link.id }) });
+        if (result?.deleted !== true) {
+          throw new Error(result?.warning || result?.error || 'Server belum mengonfirmasi penghapusan link.');
+        }
+        pendingDeletedIdsRef.current.add(id);
+        setLinks(current => current.filter(item => String(item?.id ?? '') !== id));
+        setSummary(current => {
+          const next = { ...current };
+          if (Number.isFinite(Number(next.total))) next.total = Math.max(0, Number(next.total) - 1);
+          const statusKey = String(link.status || '').toLowerCase();
+          if (statusKey && Number.isFinite(Number(next[statusKey]))) next[statusKey] = Math.max(0, Number(next[statusKey]) - 1);
+          if (link.is_pinned && Number.isFinite(Number(next.pinned))) next.pinned = Math.max(0, Number(next.pinned) - 1);
+          return next;
+        });
+        setMessage({
+          type: result.pending_sync ? 'info' : 'success',
+          text: result.warning || (result.pending_sync
+            ? 'Link dihapus dari tampilan. Penghapusan masih menunggu sinkronisasi Google Sheets.'
+            : 'Link archive dihapus.'),
+        });
+        if (result.pending_sync) schedulePendingDeleteRefresh(id);
       } catch (error) {
+        pendingDeletedIdsRef.current.delete(id);
+        if (previousIndex >= 0) {
+          setLinks(current => {
+            if (current.some(item => String(item?.id ?? '') === id)) return current;
+            const restored = current.slice();
+            restored.splice(Math.min(previousIndex, restored.length), 0, previousLinks[previousIndex]);
+            return restored;
+          });
+        }
         setMessage({ type: 'error', text: error.message });
       } finally {
         setLoading(false);
@@ -7234,12 +7933,29 @@
       switchTab('padan', { scroll: true });
     }
 
+    function openPdfImport() {
+      window.history.replaceState(null, '', '?admin=1&admin_tab=distribution#pdf-import');
+      const update = () => {
+        if (window.ReactDOM?.flushSync) window.ReactDOM.flushSync(() => setTab('admin'));
+        else setTab('admin');
+      };
+      if (!prefersReducedMotion() && typeof document.startViewTransition === 'function') {
+        document.startViewTransition(update);
+      } else {
+        update();
+      }
+      scrollWorkbench();
+      window.setTimeout(() => {
+        document.getElementById('pdf-import')?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+      }, 180);
+    }
+
     const primaryNavItems = [
       ['home', 'Beranda', 'Map'],
       ['padan', 'Padan', 'ClipboardCheck'],
+      ['documents', 'Dokumen', 'FolderCheck'],
       ['links', 'Arsip', 'LibraryBig'],
       ['about', 'Tentang', 'Info'],
-      ['admin', 'Admin', 'Settings2'],
     ];
     const adminNavItems = [
       ['admin', 'Admin', 'Settings2'],
@@ -7267,6 +7983,16 @@
         actions: [
           ['padan', 'Upload file', 'UploadCloud', 'primary'],
           ['home', 'Pilih dari peta', 'MapPinned', 'ghost'],
+          ['links', 'Buka arsip', 'LibraryBig', 'ghost'],
+        ],
+      },
+      documents: {
+        kicker: 'Audit dokumen lokasi',
+        title: 'Dokumen KAT',
+        copy: 'Lihat progres sembilan dokumen wajib per lokasi, temukan bukti yang sudah tertaut, dan lanjutkan scan PDF melalui alur admin.',
+        actions: [
+          ['documents', 'Buka dashboard', 'FolderCheck', 'primary'],
+          ['home', 'Lihat peta', 'Map', 'ghost'],
           ['links', 'Buka arsip', 'LibraryBig', 'ghost'],
         ],
       },
@@ -7378,7 +8104,7 @@
             h('div', null,
               h('p', { className: 'dock-eyebrow' }, 'Ruang kerja'),
               h('div', { className: 'flex flex-wrap items-center gap-2' },
-                h('strong', { className: 'dock-title' }, tab === 'home' ? 'Peta operasional' : tab === 'padan' ? 'Padan data BNBA' : tab === 'links' ? 'Arsip link' : tab === 'about' ? 'Tentang project' : 'Admin data KAT'),
+                h('strong', { className: 'dock-title' }, tab === 'home' ? 'Peta operasional' : tab === 'padan' ? 'Padan data BNBA' : tab === 'documents' ? 'Dokumen lokasi' : tab === 'links' ? 'Arsip link' : tab === 'about' ? 'Tentang project' : 'Admin data KAT'),
                 h(DataStoreSourceBadge, { mode: activeDataStoreMode, label: activeDataStoreLabel, prefix: 'Data' })
               )
             )
@@ -7390,7 +8116,7 @@
           )
         ),
         h('div', { key: tab, className: 'content-stack motion-page' },
-          tab === 'home' ? h(HomeMap, { appConfig, onOpenArchive: () => switchTab('links'), onStartPadan: startPadanFromMap }) : tab === 'padan' ? h(PadanDataPage, { appConfig, initialRegion: padanSeed, initialShortCode }) : tab === 'links' ? h(LinkArchivePage) : tab === 'about' ? h(AboutPage) : h(AdminPage)
+          tab === 'home' ? h(HomeMap, { appConfig, onOpenArchive: () => switchTab('links'), onStartPadan: startPadanFromMap }) : tab === 'padan' ? h(PadanDataPage, { appConfig, initialRegion: padanSeed, initialShortCode }) : tab === 'documents' ? h(DocumentsDashboardPage, { onOpenPdfImport: openPdfImport }) : tab === 'links' ? h(LinkArchivePage) : tab === 'about' ? h(AboutPage) : h(AdminPage)
         )
       )
     );
